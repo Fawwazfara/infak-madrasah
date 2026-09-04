@@ -1,18 +1,55 @@
-name: Deploy Web ke cPanel via SSH
+name: CI/CD Pipeline Laravel
 
 on:
   push:
     branches:
       - main
+      - staging
 
 jobs:
-  deploy:
+  test_and_build:
+    name: Pengujian Otomatis (CI)
     runs-on: ubuntu-latest
     steps:
-      - name: Mengambil kode terbaru (Checkout)
+      - name: Checkout Kode
         uses: actions/checkout@v4
 
-      - name: Sinkronisasi file ke Server via SCP
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2' # Sesuaikan dengan versi PHP server Anda
+
+      - name: Install Dependensi & Jalankan Test
+        run: |
+          composer install -q --no-ansi --no-interaction --no-scripts --no-progress --prefer-dist
+          cp .env.example .env
+          php artisan key:generate
+          php artisan test
+
+  deploy_staging:
+    name: Deploy ke Sandbox (Staging)
+    needs: test_and_build
+    if: github.ref == 'refs/heads/staging'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Kirim ke Folder Sandbox via SCP
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: "."
+          target: "/home/u1zh8984/public_html/assajjad.web.id/sandbox/"
+
+  deploy_production:
+    name: Deploy ke Web Utama (Production)
+    needs: test_and_build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Kirim ke Folder Utama via SCP
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.SSH_HOST }}
