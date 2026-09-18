@@ -33,7 +33,7 @@ jobs:
 
       - name: Build Frontend (Vue)
         run: |
-          npm install
+          npm install --legacy-peer-deps
           npm run build
 
       - name: Kemas File (Zip) agar cepat di-upload
