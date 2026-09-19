@@ -76,7 +76,9 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             cd /home/u1zh8984/public_html/assajjad.web.id/
+            php artisan down --render="errors::503" || true
             unzip -q -o deploy.zip
-            rm deploy.zip
+            rm -f deploy.zip
             php artisan migrate --force
             php artisan optimize:clear
+            php artisan up || true
