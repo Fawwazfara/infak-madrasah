@@ -64,6 +64,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/infak', [InfakController::class, 'index']);
     Route::post('/infak', [InfakController::class, 'store']);
     Route::post('/infak/sync', [InfakController::class, 'syncBySiswa']);
+    Route::post('/infak/blast-wa', [InfakController::class, 'blastReminder']);
     Route::get('/siswa/{id}/infak', [InfakController::class, 'getBySiswa']);
     Route::put('/infak/{id}', [InfakController::class, 'update']);
     Route::delete('/infak/{id}', [InfakController::class, 'destroy']);

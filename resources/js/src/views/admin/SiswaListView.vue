@@ -34,6 +34,16 @@
           >
             <span class="material-symbols-outlined text-[20px]">print</span> Cetak Form Setoran
           </button>
+
+          <button 
+            @click="blastWA"
+            :disabled="isBlasting"
+            class="flex-1 md:flex-none bg-[#25D366] text-white px-4 py-2 rounded-xl font-label-md text-label-md flex items-center justify-center gap-2 hover:bg-[#128C7E] transition-colors active:scale-95 shadow-sm whitespace-nowrap disabled:opacity-70 disabled:cursor-not-allowed"
+          >
+            <span v-if="!isBlasting" class="material-symbols-outlined text-[20px]">campaign</span>
+            <span v-else class="material-symbols-outlined animate-spin text-[20px]">sync</span>
+            Blast WA Tunggakan
+          </button>
         </div>
         
         <div class="relative w-full md:w-64">
@@ -174,6 +184,7 @@ const students = ref([]);
 const classes = ref([]);
 const isLoading = ref(true);
 const selectedClass = ref('');
+const isBlasting = ref(false);
 
 const fetchClasses = async () => {
   try {
@@ -221,6 +232,22 @@ const cetakFormSetoran = () => {
   const kelasObj = classes.value.find(c => c.nama_kelas === selectedClass.value);
   if (kelasObj) {
     window.open(`/api/kelas/${kelasObj.id}/form-setoran`, '_blank');
+  }
+};
+
+const blastWA = async () => {
+  if (!confirm('Anda yakin ingin mengirim pesan WhatsApp penagihan massal ke wali santri yang menunggak 2 bulan atau lebih?')) return;
+  
+  if (isBlasting.value) return;
+  isBlasting.value = true;
+  try {
+    const res = await axios.post('/infak/blast-wa');
+    alert(res.data.message || 'Blast WA berhasil dikirim.');
+  } catch (error) {
+    console.error("Gagal blast WA", error);
+    alert(error.response?.data?.message || "Terjadi kesalahan saat mengirim Blast WA.");
+  } finally {
+    isBlasting.value = false;
   }
 };
 

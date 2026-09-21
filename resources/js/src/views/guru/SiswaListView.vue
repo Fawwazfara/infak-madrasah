@@ -8,8 +8,16 @@
           <p class="font-body-md text-on-surface-variant">Daftar siswa di kelas Anda.</p>
         </div>
         
-        <div class="flex gap-sm w-full md:w-auto">
-          <!-- Action buttons can go here if needed in future -->
+        <div class="flex flex-wrap gap-sm w-full md:w-auto">
+          <button 
+            @click="blastWA"
+            :disabled="isBlasting"
+            class="flex-1 md:flex-none bg-[#25D366] text-white px-4 py-2 rounded-xl font-label-md text-label-md flex items-center justify-center gap-2 hover:bg-[#128C7E] transition-colors active:scale-95 shadow-sm whitespace-nowrap disabled:opacity-70 disabled:cursor-not-allowed"
+          >
+            <span v-if="!isBlasting" class="material-symbols-outlined text-[20px]">campaign</span>
+            <span v-else class="material-symbols-outlined animate-spin text-[20px]">sync</span>
+            Blast WA Tunggakan
+          </button>
         </div>
         
         <div class="relative w-full md:w-64" v-if="classes.length > 0">
@@ -114,6 +122,7 @@ const classes = ref([]);
 const students = ref([]);
 const filteredStudents = ref([]);
 const selectedClass = ref('');
+const isBlasting = ref(false);
 
 const fetchClasses = async () => {
   try {
@@ -144,6 +153,22 @@ const filterStudents = () => {
     filteredStudents.value = students.value;
   } else {
     filteredStudents.value = students.value.filter(s => s.kelas === selectedClass.value);
+  }
+};
+
+const blastWA = async () => {
+  if (!confirm('Anda yakin ingin mengirim pesan WhatsApp penagihan massal ke wali santri yang menunggak 2 bulan atau lebih?')) return;
+  
+  if (isBlasting.value) return;
+  isBlasting.value = true;
+  try {
+    const res = await axios.post('/infak/blast-wa');
+    alert(res.data.message || 'Blast WA berhasil dikirim.');
+  } catch (error) {
+    console.error("Gagal blast WA", error);
+    alert(error.response?.data?.message || "Terjadi kesalahan saat mengirim Blast WA.");
+  } finally {
+    isBlasting.value = false;
   }
 };
 
