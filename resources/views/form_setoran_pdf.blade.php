@@ -63,6 +63,7 @@
             
             <tr><td class="text-center h-15">{{ count($siswas) + 1 }}</td><td></td><td></td><td></td><td></td></tr>
             <tr><td class="text-center h-15">{{ count($siswas) + 2 }}</td><td></td><td></td><td></td><td></td></tr>
+            <tr><td class="text-center h-15">{{ count($siswas) + 3 }}</td><td></td><td></td><td></td><td></td></tr>
             
             <tr>
                 <td colspan="4" class="text-right font-bold" style="font-weight: bold;">TOTAL PEMASUKAN</td>
