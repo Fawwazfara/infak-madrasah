@@ -277,14 +277,40 @@ class InfakController extends Controller
 
         $sentCount = 0;
 
+        // Map bulan ke angka untuk perbandingan dengan created_at
+        $monthToNumber = [
+            'July' => 7, 'August' => 8, 'September' => 9, 'October' => 10,
+            'November' => 11, 'December' => 12, 'January' => 1, 'February' => 2,
+            'March' => 3, 'April' => 4, 'May' => 5, 'June' => 6
+        ];
+
         foreach ($siswas as $siswa) {
+            // Filter bulan: hanya hitung bulan SETELAH siswa terdaftar di sistem
+            $siswaCreatedAt = \Carbon\Carbon::parse($siswa->created_at);
+            $siswaCreatedMonth = (int) $siswaCreatedAt->month;
+            $siswaCreatedYear = (int) $siswaCreatedAt->year;
+
+            $applicableMonths = array_filter($previousMonths, function($month) use ($monthToNumber, $siswaCreatedMonth, $siswaCreatedYear, $tahun) {
+                $monthNum = $monthToNumber[$month] ?? 0;
+                $monthYear = ($monthNum >= 7) ? (int)$tahun : (int)$tahun + 1; // Tahun ajaran: Jul-Des = tahun ini, Jan-Jun = tahun depan
+                
+                // Jika siswa terdaftar di tahun yang sama
+                if ($siswaCreatedYear == $monthYear) {
+                    return $monthNum >= $siswaCreatedMonth;
+                }
+                // Jika bulan ini di tahun setelah siswa terdaftar, pasti berlaku
+                return $monthYear > $siswaCreatedYear;
+            });
+
+            if (empty($applicableMonths)) continue;
+
             $paidMonths = Infak::where('siswa_id', $siswa->id)
                 ->where('tahun', $tahun)
-                ->whereIn('bulan', $previousMonths)
+                ->whereIn('bulan', $applicableMonths)
                 ->pluck('bulan')
                 ->toArray();
             
-            $missedMonths = array_diff($previousMonths, $paidMonths);
+            $missedMonths = array_diff($applicableMonths, $paidMonths);
             
             if (count($missedMonths) >= 2) {
                 // Translate month names for message
