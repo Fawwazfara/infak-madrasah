@@ -14,8 +14,13 @@ class SiswaController extends Controller
     public function index(Request $request)
     {
         $user = $request->user();
-        
-        $query = Siswa::with(['kelas', 'infaks']);
+        $tahunAjaran = \App\AcademicYear::current();
+
+        // Filter infak ke tahun ajaran berjalan: grid hanya menampilkan bulan
+        // tahun ajaran ini, jadi baris tahun-tahun lalu tidak perlu dimuat.
+        $query = Siswa::with(['kelas', 'infaks' => function ($q) use ($tahunAjaran) {
+            $q->where('tahun', $tahunAjaran);
+        }]);
 
         if ($user->role === 'guru') {
             // Guru only sees their classes
@@ -31,16 +36,25 @@ class SiswaController extends Controller
         // Transform data for frontend table
         $months = ['Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des', 'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun'];
         // Current academic year setup: July to June. We'll map the months to the payment array.
-        
-        $result = $siswas->map(function($siswa) use ($months) {
+
+        // Set bulan lunas per siswa (O(1) per cek, bukan contains() di koleksi)
+        $paidSets = [];
+        foreach ($siswas as $s) {
+            $set = [];
+            foreach ($s->infaks as $infak) {
+                $set[$infak->bulan] = true;
+            }
+            $paidSets[$s->id] = $set;
+        }
+
+        $result = $siswas->map(function($siswa) use ($months, $paidSets) {
             $payments = [];
             foreach ($months as $m) {
-                // Check if there is an infak for this month
-                // In a real app we'd also check the academic year
-                $hasPaid = $siswa->infaks->where('bulan', $this->mapBulanIndonesia($m))->count() > 0;
+                // Check if there is an infak for this month on the running academic year
+                $hasPaid = isset($paidSets[$siswa->id][$this->mapBulanIndonesia($m)]);
+
                 $payments[] = $hasPaid;
             }
-
             return [
                 'id' => $siswa->id,
                 'name' => $siswa->nama_lengkap, // Pass full name instead of first word
@@ -120,7 +134,10 @@ class SiswaController extends Controller
     public function exportExcel(Request $request)
     {
         $user = $request->user();
-        $query = Siswa::with(['kelas', 'infaks']);
+        $tahunAjaran = \App\AcademicYear::current();
+        $query = Siswa::with(['kelas', 'infaks' => function ($q) use ($tahunAjaran) {
+            $q->where('tahun', $tahunAjaran);
+        }]);
 
         if ($user->role === 'guru') {
             $kelasIds = Kelas::where('guru_id', $user->id)->pluck('id');
@@ -129,6 +146,16 @@ class SiswaController extends Controller
 
         $siswas = $query->get();
         $months = ['Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des', 'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun'];
+        $englishMonths = array_map([$this, 'mapBulanIndonesia'], $months);
+
+        $paidSets = [];
+        foreach ($siswas as $s) {
+            $set = [];
+            foreach ($s->infaks as $infak) {
+                $set[$infak->bulan] = true;
+            }
+            $paidSets[$s->id] = $set;
+        }
 
         $fileName = 'backup_siswa_' . date('Y_m_d_His') . '.csv';
         $headers = array(
@@ -144,7 +171,7 @@ class SiswaController extends Controller
             $columns[] = $m;
         }
 
-        $callback = function() use($siswas, $columns, $months) {
+        $callback = function() use($siswas, $columns, $months, $paidSets, $englishMonths) {
             $file = fopen('php://output', 'w');
             fputcsv($file, $columns);
 
@@ -159,8 +186,8 @@ class SiswaController extends Controller
                     $siswa->wa_wali_1 ?: '-'
                 ];
                 
-                foreach ($months as $m) {
-                    $hasPaid = $siswa->infaks->where('bulan', $this->mapBulanIndonesia($m))->count() > 0;
+                foreach ($months as $idx => $m) {
+                    $hasPaid = isset($paidSets[$siswa->id][$englishMonths[$idx]]);
                     $row[] = $hasPaid ? 'Lunas' : 'Belum';
                 }
                 
@@ -175,7 +202,7 @@ class SiswaController extends Controller
     public function getUnpaidStudents(Request $request, $kelas_id)
     {
         $bulan = $request->query('bulan');
-        $tahun = $request->query('tahun', date('Y'));
+        $tahun = \App\AcademicYear::current();
 
         if (!$bulan) {
             return response()->json(['error' => 'Bulan is required'], 400);
@@ -183,7 +210,7 @@ class SiswaController extends Controller
 
         $bulanFull = $this->mapBulanIndonesia($bulan);
 
-        $siswas = Siswa::where('kelas_id', $kelas_id)->get();
+        $siswas = Siswa::where('kelas_id', $kelas_id)->orderBy('nama_lengkap', 'asc')->get();
 
         $paidStudentIds = Infak::where('kelas_id', $kelas_id)
             ->where('bulan', $bulanFull)

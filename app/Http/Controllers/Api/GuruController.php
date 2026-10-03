@@ -15,8 +15,13 @@ class GuruController extends Controller
         // Get all teachers and their classes
         $teachers = User::where('role', 'guru')->get();
 
-        $result = $teachers->map(function ($teacher) {
-            $kelas = Kelas::where('guru_id', $teacher->id)->pluck('nama_kelas');
+        // Batch: 1 query semua kelas, dikelompokkan per guru (bukan 1 query per guru)
+        $kelasByGuru = Kelas::whereIn('guru_id', $teachers->pluck('id'))
+            ->get()
+            ->groupBy('guru_id');
+
+        $result = $teachers->map(function ($teacher) use ($kelasByGuru) {
+            $kelas = ($kelasByGuru->get($teacher->id) ?? collect())->pluck('nama_kelas');
             return [
                 'id' => $teacher->id,
                 'name' => $teacher->name,

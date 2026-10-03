@@ -65,23 +65,27 @@ class PushController extends Controller
 
             $previousMonths = array_slice($months, 0, $currentIndex);
 
+            // Batch: 1 query siswa + 1 query bulan terbayar untuk semua siswa,
+            // pengganti 1 query infak per siswa (N+1).
+            $allSiswas = \App\Models\Siswa::select('id', 'kelas_id')->get();
+            $paidMonthsBySiswa = \App\Models\Infak::whereIn('siswa_id', $allSiswas->pluck('id'))
+                ->whereIn('bulan', $previousMonths)
+                ->get(['siswa_id', 'bulan'])
+                ->groupBy('siswa_id');
+
+            $tunggakanPerKelas = [];
+            foreach ($allSiswas as $siswa) {
+                $paidMonths = $paidMonthsBySiswa->get($siswa->id, collect())->pluck('bulan')->all();
+                $missed = count(array_diff($previousMonths, $paidMonths));
+                if ($missed > 0) {
+                    $tunggakanPerKelas[$siswa->kelas_id] = ($tunggakanPerKelas[$siswa->kelas_id] ?? 0) + 1;
+                }
+            }
+
             foreach ($kelasList as $kelas) {
                 if (!$kelas->wali_kelas) continue;
 
-                $siswas = \App\Models\Siswa::where('kelas_id', $kelas->id)->get();
-                $tunggakanCount = 0;
-
-                foreach ($siswas as $siswa) {
-                    $paidMonths = \App\Models\Infak::where('siswa_id', $siswa->id)
-                        ->whereIn('bulan', $previousMonths)
-                        ->pluck('bulan')
-                        ->toArray();
-                    
-                    $missed = count(array_diff($previousMonths, $paidMonths));
-                    if ($missed > 0) {
-                        $tunggakanCount++;
-                    }
-                }
+                $tunggakanCount = $tunggakanPerKelas[$kelas->id] ?? 0;
 
                 if ($tunggakanCount > 0) {
                     $msg = "Assalamu'alaikum, di " . $kelas->nama_kelas . " masih ada " . $tunggakanCount . " siswa yang memiliki tunggakan infak dari bulan-bulan sebelumnya. Yuk cek detailnya!";

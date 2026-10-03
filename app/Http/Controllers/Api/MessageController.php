@@ -20,8 +20,17 @@ class MessageController extends Controller
         
         // Let's get all Guru
         $gurus = User::where('role', 'guru')->get();
+        $guruIds = $gurus->pluck('id');
 
-        $chatList = $gurus->map(function ($guru) use ($user) {
+        // 1 query grouped: unread count untuk semua guru sekaligus
+        $unreadByGuru = Message::where('receiver_id', $user->id)
+            ->whereIn('sender_id', $guruIds)
+            ->where('is_read', false)
+            ->groupBy('sender_id')
+            ->selectRaw('sender_id, COUNT(*) as total')
+            ->pluck('total', 'sender_id');
+
+        $chatList = $gurus->map(function ($guru) use ($user, $unreadByGuru) {
             // Get the last message between this user and guru
             $lastMessage = Message::where(function ($query) use ($user, $guru) {
                 $query->where('sender_id', $user->id)->where('receiver_id', $guru->id);
@@ -29,19 +38,13 @@ class MessageController extends Controller
                 $query->where('sender_id', $guru->id)->where('receiver_id', $user->id);
             })->latest()->first();
 
-            // Unread count (messages sent from guru to user that are unread)
-            $unreadCount = Message::where('sender_id', $guru->id)
-                ->where('receiver_id', $user->id)
-                ->where('is_read', false)
-                ->count();
-
             return [
                 'id' => $guru->id,
                 'name' => $guru->name,
                 'lastMessage' => $lastMessage ? $lastMessage->message : 'Belum ada percakapan.',
                 'lastTime' => $lastMessage ? $this->formatTime($lastMessage->created_at) : '',
                 'lastTimestamp' => $lastMessage ? $lastMessage->created_at : null,
-                'unread' => $unreadCount,
+                'unread' => (int) ($unreadByGuru[$guru->id] ?? 0),
                 'online' => false,
                 'avatar' => null
             ];
@@ -84,8 +87,8 @@ class MessageController extends Controller
             ->where('is_read', false)
             ->update(['is_read' => true]);
 
-        // Get messages
-        $messages = Message::where(function ($query) use ($user, $userId) {
+        // Get messages (eager load sender: hindari lazy-load relasi per pesan)
+        $messages = Message::with('sender')->where(function ($query) use ($user, $userId) {
                 $query->where('sender_id', $user->id)->where('receiver_id', $userId);
             })->orWhere(function ($query) use ($user, $userId) {
                 $query->where('sender_id', $userId)->where('receiver_id', $user->id);

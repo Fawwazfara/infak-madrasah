@@ -41,84 +41,76 @@ class DashboardController extends Controller
             $kelasIds = Kelas::where('guru_id', $user->id)->pluck('id')->toArray();
         }
 
-        // Metrics for current month
-        $currentMonth = date('m');
-        $currentYear = date('Y');
+        // Satu query grup per bulan untuk window 6 bulan (bulan ini + 5 sebelumnya),
+        // mencakup metrik "bulan ini", "bulan lalu", dan data chart sekaligus.
+        $windowStart = Carbon::now()->subMonths(5)->startOfMonth();
+        $windowEnd = Carbon::now()->endOfMonth();
 
-        $queryInfakBulanIni = Infak::whereMonth('tanggal_bayar', $currentMonth)
-                                   ->whereYear('tanggal_bayar', $currentYear);
-        if ($isGuru) {
-            $queryInfakBulanIni->whereIn('kelas_id', $kelasIds);
-        }
-        $totalPemasukanBulanIni = $queryInfakBulanIni->sum('jumlah');
+        $infakByMonth = Infak::query()
+            ->when($isGuru, fn ($q) => $q->whereIn('kelas_id', $kelasIds))
+            ->whereBetween('tanggal_bayar', [$windowStart, $windowEnd])
+            ->groupByRaw('YEAR(tanggal_bayar), MONTH(tanggal_bayar)')
+            ->selectRaw('YEAR(tanggal_bayar) as y, MONTH(tanggal_bayar) as m, SUM(jumlah) as total')
+            ->get()
+            ->keyBy(fn ($row) => $row->y . '-' . str_pad((string) $row->m, 2, '0', STR_PAD_LEFT));
 
-        $totalPengeluaranBulanIni = 0;
+        $pengeluaranByMonth = collect();
         if (!$isGuru) {
-            $totalPengeluaranBulanIni = \App\Models\Pengeluaran::whereMonth('tanggal', $currentMonth)
-                                            ->whereYear('tanggal', $currentYear)
-                                            ->sum('jumlah');
+            $pengeluaranByMonth = \App\Models\Pengeluaran::query()
+                ->whereBetween('tanggal', [$windowStart, $windowEnd])
+                ->groupByRaw('YEAR(tanggal), MONTH(tanggal)')
+                ->selectRaw('YEAR(tanggal) as y, MONTH(tanggal) as m, SUM(jumlah) as total')
+                ->get()
+                ->keyBy(fn ($row) => $row->y . '-' . str_pad((string) $row->m, 2, '0', STR_PAD_LEFT));
         }
-        
-        // We will define Kas / Saldo as total all time pemasukan - pengeluaran
-        // Wait, the UI says "Total Kas" vs "Pengeluaran" vs "Saldo Akhir Saat Ini"
-        // Let's provide both all-time and this-month metrics
-        $queryAllInfak = Infak::query();
-        if ($isGuru) {
-            $queryAllInfak->whereIn('kelas_id', $kelasIds);
-        }
-        $totalPemasukanAllTime = $queryAllInfak->sum('jumlah');
+
+        $bulanIniKey = Carbon::now()->format('Y-m');
+        $bulanLaluKey = Carbon::now()->subMonth()->format('Y-m');
+
+        $totalPemasukanBulanIni = $infakByMonth[$bulanIniKey]->total ?? 0;
+        $totalPemasukanBulanLalu = $infakByMonth[$bulanLaluKey]->total ?? 0;
+        $totalPengeluaranBulanIni = $isGuru ? 0 : ($pengeluaranByMonth[$bulanIniKey]->total ?? 0);
+
+        // Total all-time (2 query agregat)
+        $totalPemasukanAllTime = Infak::query()
+            ->when($isGuru, fn ($q) => $q->whereIn('kelas_id', $kelasIds))
+            ->sum('jumlah');
         $totalPengeluaranAllTime = $isGuru ? 0 : \App\Models\Pengeluaran::sum('jumlah');
         $saldoAllTime = $totalPemasukanAllTime - $totalPengeluaranAllTime;
 
-        // Chart Data (Last 6 Months)
+        // Data chart (label dihitung, nilai diambil dari map grup di atas)
         $chartLabels = [];
         $chartPemasukan = [];
         $chartPengeluaran = [];
-        
+
         for ($i = 5; $i >= 0; $i--) {
             $date = Carbon::now()->subMonths($i);
-            $m = $date->format('m');
-            $y = $date->format('Y');
-            
+
             $engShort = $date->format('M');
             $indoShort = [
                 'Jan' => 'Jan', 'Feb' => 'Feb', 'Mar' => 'Mar', 'Apr' => 'Apr', 'May' => 'Mei', 'Jun' => 'Jun',
                 'Jul' => 'Jul', 'Aug' => 'Agu', 'Sep' => 'Sep', 'Oct' => 'Okt', 'Nov' => 'Nov', 'Dec' => 'Des'
             ];
             $chartLabels[] = $indoShort[$engShort] ?? $engShort;
-            
-            $qInfak = Infak::whereMonth('tanggal_bayar', $m)->whereYear('tanggal_bayar', $y);
-            if ($isGuru) {
-                $qInfak->whereIn('kelas_id', $kelasIds);
-            }
-            $chartPemasukan[] = $qInfak->sum('jumlah');
-            
+
+            $key = $date->format('Y-m');
+            $chartPemasukan[] = $infakByMonth[$key]->total ?? 0;
+
             if (!$isGuru) {
-                $chartPengeluaran[] = \App\Models\Pengeluaran::whereMonth('tanggal', $m)->whereYear('tanggal', $y)->sum('jumlah');
+                $chartPengeluaran[] = $pengeluaranByMonth[$key]->total ?? 0;
             }
         }
-        
-        // Also calculate differences from last month for percentages
-        $lastMonthDate = Carbon::now()->subMonth();
-        $lm_m = $lastMonthDate->format('m');
-        $lm_y = $lastMonthDate->format('Y');
-        
-        $qInfakLastMonth = Infak::whereMonth('tanggal_bayar', $lm_m)->whereYear('tanggal_bayar', $lm_y);
-        if ($isGuru) {
-            $qInfakLastMonth->whereIn('kelas_id', $kelasIds);
-        }
-        $totalPemasukanBulanLalu = $qInfakLastMonth->sum('jumlah');
-        
+
         $persenPemasukan = 0;
         if ($totalPemasukanBulanLalu > 0) {
             $persenPemasukan = round((($totalPemasukanBulanIni - $totalPemasukanBulanLalu) / $totalPemasukanBulanLalu) * 100);
         } else if ($totalPemasukanBulanIni > 0) {
             $persenPemasukan = 100;
         }
-        
+
         $persenPengeluaran = 0;
         if (!$isGuru) {
-            $totalPengeluaranBulanLalu = \App\Models\Pengeluaran::whereMonth('tanggal', $lm_m)->whereYear('tanggal', $lm_y)->sum('jumlah');
+            $totalPengeluaranBulanLalu = $pengeluaranByMonth[$bulanLaluKey]->total ?? 0;
             if ($totalPengeluaranBulanLalu > 0) {
                 $persenPengeluaran = round((($totalPengeluaranBulanIni - $totalPengeluaranBulanLalu) / $totalPengeluaranBulanLalu) * 100);
             } else if ($totalPengeluaranBulanIni > 0) {
@@ -167,16 +159,25 @@ class DashboardController extends Controller
         $totalBelumBayar = 0;
         $kepatuhanList = [];
 
+        // 1 query: semua siswa yang sudah bayar bulan ini (tahun ajaran berjalan),
+        // pengganti cek exists() per siswa (N+1).
+        $paidSiswaSet = array_fill_keys(
+            Infak::where('bulan', $currentMonth)
+                ->where('tahun', \App\AcademicYear::current())
+                ->whereNotNull('siswa_id')
+                ->distinct()
+                ->pluck('siswa_id')
+                ->all(),
+            true
+        );
+
         foreach ($kelasList as $kelas) {
             $lunas = 0;
             $nunggak = 0;
 
             foreach ($kelas->siswas as $siswa) {
                 // Check if this student has an infak for the current month
-                $hasPaidThisMonth = Infak::where('siswa_id', $siswa->id)
-                    ->where('bulan', $currentMonth)
-                    ->where('tahun', $currentYear)
-                    ->exists();
+                $hasPaidThisMonth = isset($paidSiswaSet[$siswa->id]);
 
                 if ($hasPaidThisMonth) {
                     $lunas++;

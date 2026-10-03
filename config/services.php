@@ -37,6 +37,8 @@ return [
 
     'fonnte' => [
         'token' => env('FONNTE_TOKEN'),
+        // Jeda minimal (detik) antar pesan WhatsApp agar nomor tidak keblokir
+        'delay' => (int) env('FONNTE_DELAY', 60),
     ],
 
 ];

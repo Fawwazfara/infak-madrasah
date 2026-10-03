@@ -181,8 +181,19 @@
             <div class="flex flex-col gap-xs">
               <label class="font-label-md text-label-md text-on-surface" for="tanggal">Tanggal Bayar</label>
               <div class="relative">
-                <input v-model="form.tanggal" required class="w-full h-12 rounded-xl border-outline-variant text-on-surface bg-surface-bright focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/20 pl-4 pr-10 font-body-md text-body-md transition-all block" id="tanggal" type="date">
+                <input
+                  v-model="tanggalDisplay"
+                  required
+                  inputmode="numeric"
+                  maxlength="10"
+                  placeholder="hh/bb/tttt"
+                  @input="onTanggalInput"
+                  class="w-full h-12 rounded-xl border-outline-variant text-on-surface bg-surface-bright focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/20 pl-4 pr-10 font-body-md text-body-md transition-all block tracking-widest"
+                  id="tanggal"
+                  type="text"
+                >
               </div>
+              <p class="font-label-sm text-label-sm text-on-surface-variant">Format: tanggal/bulan/tahun (contoh: 01/10/2026)</p>
             </div>
             
             <div class="flex flex-col gap-xs">
@@ -252,6 +263,8 @@
 import { ref, reactive, computed, onMounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import axios from 'axios';
+import { toDisplayDate, toIsoDate, autoFormatDisplayDate } from '../../utils/date';
+import { drainOutbox } from '../../utils/waOutbox';
 
 const router = useRouter();
 
@@ -269,6 +282,12 @@ const form = reactive({
   nominal: 30000,
   selectedMonths: []
 });
+
+const tanggalDisplay = ref('');
+
+const onTanggalInput = () => {
+  tanggalDisplay.value = autoFormatDisplayDate(tanggalDisplay.value);
+};
 
 const kelasi = ref([]);
 const students = ref([]);
@@ -326,6 +345,7 @@ onMounted(async () => {
   // Set default date to today
   const today = new Date();
   form.tanggal = today.toISOString().split('T')[0];
+  tanggalDisplay.value = toDisplayDate(form.tanggal);
 
   try {
     const res = await axios.get('/kelas');
@@ -352,7 +372,7 @@ watch(() => form.kelas_id, async (newKelasId) => {
       students.value = res.data.filter(s => {
         const cls = kelasi.value.find(k => k.id === newKelasId);
         return s.kelas === cls.nama_kelas;
-      });
+      }).sort((a, b) => String(a.fullName).localeCompare(String(b.fullName), 'id'));
     } catch (e) {
       console.error(e);
     } finally {
@@ -397,7 +417,7 @@ watch([() => form.kelas_id, () => form.selectedMonths], async ([newKelasId, newS
     try {
       const currentYear = new Date().getFullYear();
       const res = await axios.get(`/kelas/${newKelasId}/unpaid-students?bulan=${selectedMonth}&tahun=${currentYear}`);
-      students.value = res.data;
+      students.value = [...res.data].sort((a, b) => String(a.fullName).localeCompare(String(b.fullName), 'id'));
     } catch (e) {
       console.error(e);
     } finally {
@@ -442,8 +462,15 @@ const saveTransaction = async () => {
     alert("Pilih minimal satu bulan!");
     return;
   }
-  
-  if(!form.kelas_id || !form.tanggal) {
+
+  const isoTanggal = toIsoDate(tanggalDisplay.value);
+  if (!isoTanggal) {
+    alert("Tanggal bayar tidak valid. Gunakan format tanggal/bulan/tahun, contoh 01/10/2026.");
+    return;
+  }
+  form.tanggal = isoTanggal;
+
+  if(!form.kelas_id) {
     alert("Lengkapi semua field yang diperlukan!");
     return;
   }
@@ -474,7 +501,10 @@ const saveTransaction = async () => {
     }
 
     await axios.post('/infak', payload);
-    
+
+    // Kirim konfirmasi WA ke wali secara bertahap (dengan delay) di background
+    drainOutbox().catch(() => {});
+
     isSuccess.value = true;
     setTimeout(() => {
       isSuccess.value = false;
@@ -482,9 +512,10 @@ const saveTransaction = async () => {
       form.kelas_id = '';
       form.siswa_id = '';
       form.siswa_ids = [];
-      form.months = [];
-      form.nominal = '';
-      form.tanggal_bayar = new Date().toISOString().split('T')[0];
+      form.selectedMonths = [];
+      form.nominal = 30000;
+      form.tanggal = new Date().toISOString().split('T')[0];
+      tanggalDisplay.value = toDisplayDate(form.tanggal);
     }, 1500);
   } catch (error) {
     console.error(error);

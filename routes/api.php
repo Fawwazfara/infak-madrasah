@@ -2,7 +2,6 @@
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\SiswaController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\GuruController;
@@ -40,11 +39,7 @@ Route::get('/delete-dummy-bambim', function () {
     return response()->json(['message' => 'Semua data dummy Bambim berhasil dihapus bersih!']);
 });
 
-Route::post('/login', [AuthController::class, 'login']);
-
 Route::middleware('auth:sanctum')->group(function () {
-    Route::post('/logout', [AuthController::class, 'logout']);
-    
     Route::get('/siswa', [SiswaController::class, 'index']);
     Route::get('/siswa/export', [SiswaController::class, 'exportExcel']);
     Route::get('/siswa/{id}', [SiswaController::class, 'show']);
@@ -58,8 +53,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/guru/{id}', [GuruController::class, 'destroy']);
 
     Route::get('/infak/terbaru', [InfakController::class, 'getTerbaru']);
-    Route::get('/kelas', [KelasController::class, 'index']);
-    Route::post('/kelas', [KelasController::class, 'store']);
     Route::get('/kelas/{kelas_id}/unpaid-students', [SiswaController::class, 'getUnpaidStudents']);
     Route::get('/infak', [InfakController::class, 'index']);
     Route::post('/infak', [InfakController::class, 'store']);
@@ -94,4 +87,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/push-subscribe', [PushController::class, 'subscribe']);
     Route::post('/push-test', [PushController::class, 'testPush']);
     Route::post('/push-send-reminders', [PushController::class, 'sendReminders']);
+
+    // Antrean Kirim WhatsApp (delay antar pesan agar nomor tidak keblokir)
+    Route::get('/wa/status', [\App\Http\Controllers\Api\WaController::class, 'status']);
+    Route::post('/wa/process', [\App\Http\Controllers\Api\WaController::class, 'process']);
 });

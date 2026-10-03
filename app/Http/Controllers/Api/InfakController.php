@@ -48,7 +48,7 @@ class InfakController extends Controller
         ]);
 
         $bulanArray = $request->months;
-        $tahunSekarang = date('Y'); // Simplifying for now
+        $tahunSekarang = \App\AcademicYear::current(); // Tahun ajaran (Jul-Jun)
         
         // Handle array of siswa_ids or single siswa_id
         $siswaIds = [];
@@ -62,53 +62,66 @@ class InfakController extends Controller
         $kelas = \App\Models\Kelas::find($request->kelas_id);
         if ($kelas) $kelasName = $kelas->nama_kelas;
 
+        // Batch: ambil semua siswa terpilih dalam 1 query (bukan find per siswa)
+        $siswaMap = Siswa::whereIn('id', $siswaIds)->get()->keyBy('id');
+
         $studentNames = [];
         $totalAmount = 0;
+        $rows = [];
 
-        foreach ($siswaIds as $sId) {
-            $siswaName = 'Siswa Tidak Diketahui';
-            $waWali = null;
-            if ($sId) {
-                $siswa = Siswa::find($sId);
-                if ($siswa) {
-                    $siswaName = $siswa->nama_lengkap;
-                    $waWali = $siswa->wa_wali_1;
+        \Illuminate\Support\Facades\DB::transaction(function () use (&$studentNames, &$totalAmount, $siswaIds, $siswaMap, $bulanArray, $request, $tahunSekarang, $kelasName) {
+            foreach ($siswaIds as $sId) {
+                $siswaName = 'Siswa Tidak Diketahui';
+                $waWali = null;
+                if ($sId) {
+                    $siswa = $siswaMap->get($sId);
+                    if ($siswa) {
+                        $siswaName = $siswa->nama_lengkap;
+                        $waWali = $siswa->wa_wali_1;
+                    }
+                }
+                if (!in_array($siswaName, $studentNames)) {
+                    $studentNames[] = $siswaName;
+                }
+
+                foreach ($bulanArray as $bulan) {
+                    $rows[] = [
+                        'siswa_id' => $sId,
+                        'kelas_id' => $request->kelas_id,
+                        'jumlah' => $request->nominal,
+                        'bulan' => $this->mapBulanToEnglish($bulan),
+                        'tahun' => $tahunSekarang,
+                        'tanggal_bayar' => $request->tanggal_bayar,
+                        'keterangan' => 'Via API',
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ];
+                    $totalAmount += $request->nominal;
+                }
+
+                // Antrekan Notifikasi WA (dikirim bertahap dengan delay agar tidak keblokir)
+                if ($waWali) {
+                    $bulanStr = implode(', ', $bulanArray);
+                    $pesan = "terimakasih pak sudah membayar infak atas nama ananda {$siswaName} untuk bulan {$bulanStr} sudah kami terima";
+                    \App\Services\WhatsAppService::queue($waWali, $pesan, 'terima-kasih');
                 }
             }
-            if (!in_array($siswaName, $studentNames)) {
-                $studentNames[] = $siswaName;
+
+            // Bulk insert: 1 query untuk semua baris (bukan 1 query per baris)
+            if ($rows) {
+                Infak::insert($rows);
             }
 
-            foreach ($bulanArray as $bulan) {
-                $infak = Infak::create([
-                    'siswa_id' => $sId,
-                    'kelas_id' => $request->kelas_id,
-                    'jumlah' => $request->nominal,
-                    'bulan' => $this->mapBulanToEnglish($bulan),
-                    'tahun' => $tahunSekarang,
-                    'tanggal_bayar' => $request->tanggal_bayar,
-                    'keterangan' => 'Via API'
-                ]);
-                $totalAmount += $request->nominal;
-            }
+            $namesStr = implode(', ', $studentNames);
+            $monthsStr = implode(', ', $bulanArray);
 
-            // Kirim Notifikasi WA
-            if ($waWali) {
-                $bulanStr = implode(', ', $bulanArray);
-                $pesan = "terimakasih pak sudah membayar infak atas nama ananda {$siswaName} untuk bulan {$bulanStr} sudah kami terima";
-                \App\Services\WhatsAppService::sendMessage($waWali, $pesan);
-            }
-        }
-
-        $namesStr = implode(', ', $studentNames);
-        $monthsStr = implode(', ', $bulanArray);
-
-        LogAktivitas::create([
-            'type' => 'income',
-            'title' => 'Pemasukan Baru (Massal/Satuan)',
-            'description' => "Penerimaan infak dari $namesStr untuk bulan $monthsStr di $kelasName",
-            'amount' => $totalAmount
-        ]);
+            LogAktivitas::create([
+                'type' => 'income',
+                'title' => 'Pemasukan Baru (Massal/Satuan)',
+                'description' => "Penerimaan infak dari $namesStr untuk bulan $monthsStr di $kelasName",
+                'amount' => $totalAmount
+            ]);
+        });
 
         return response()->json(['message' => 'Infak recorded successfully']);
     }
@@ -135,7 +148,7 @@ class InfakController extends Controller
 
     public function getBySiswa(Request $request, $id)
     {
-        $tahun = $request->query('tahun', date('Y'));
+        $tahun = \App\AcademicYear::current();
         $infak = Infak::where('siswa_id', $id)
                       ->where('tahun', $tahun)
                       ->orderBy('created_at', 'desc')
@@ -149,15 +162,16 @@ class InfakController extends Controller
         $request->validate([
             'siswa_id' => 'required|exists:siswas,id',
             'kelas_id' => 'required|exists:kelas,id',
-            'tahun' => 'required|numeric',
-            'months' => 'required|array',
-            'nominal' => 'required|numeric',
-            'tanggal_bayar' => 'required|date'
+            'tahun' => 'nullable|numeric',
+            'months' => 'nullable|array', // boleh kosong = semua bulan dibatalkan
+            'nominal' => 'nullable|numeric|min:0',
+            'tanggal_bayar' => 'required|date',
+            'update_existing' => 'nullable|boolean',
         ]);
 
         $siswaId = $request->siswa_id;
-        $tahun = $request->tahun;
-        $requestedMonths = array_map([$this, 'mapBulanToEnglish'], $request->months);
+        $tahun = \App\AcademicYear::current();
+        $requestedMonths = array_map([$this, 'mapBulanToEnglish'], $request->input('months', []));
 
         // Get existing records for the student and year
         $existingInfak = Infak::where('siswa_id', $siswaId)
@@ -169,43 +183,46 @@ class InfakController extends Controller
         // Find which months to delete and which to insert
         $toDelete = array_diff($existingMonths, $requestedMonths);
         $toInsert = array_diff($requestedMonths, $existingMonths);
+        $toKeep = array_intersect($requestedMonths, $existingMonths);
 
-        // Delete un-checked months
-        if (!empty($toDelete)) {
-            $siswaName = 'Siswa';
-            $siswa = Siswa::find($siswaId);
-            if ($siswa) $siswaName = $siswa->nama_lengkap;
+        $nominal = $request->filled('nominal') ? (float) $request->nominal : null;
 
-            foreach ($toDelete as $bulanDel) {
-                LogAktivitas::create([
-                    'type' => 'system',
-                    'title' => 'Pembatalan Infak (Sync)',
-                    'description' => "Penghapusan infak dari $siswaName bulan $bulanDel $tahun",
-                    'amount' => null
-                ]);
-            }
-
-            Infak::where('siswa_id', $siswaId)
-                 ->where('tahun', $tahun)
-                 ->whereIn('bulan', $toDelete)
-                 ->delete();
+        if (!empty($toInsert) && ($nominal === null || $nominal <= 0)) {
+            return response()->json([
+                'message' => 'Nominal wajib diisi karena ada bulan baru yang belum tercatat.',
+            ], 422);
         }
 
-        // Insert newly checked months
-        if (!empty($toInsert)) {
-            $siswaName = 'Siswa';
-            $waWali = null;
-            $siswa = Siswa::find($siswaId);
-            if ($siswa) {
-                $siswaName = $siswa->nama_lengkap;
-                $waWali = $siswa->wa_wali_1;
+        $siswa = Siswa::find($siswaId);
+        $siswaName = $siswa ? $siswa->nama_lengkap : 'Siswa';
+        $waWali = $siswa ? $siswa->wa_wali_1 : null;
+
+        // Semua perubahan (hapus/tambah/update + log) dibungkus transaksi
+        // supaya tidak pernah menyisakan data setengah jadi bila gagal di tengah jalan.
+        \Illuminate\Support\Facades\DB::transaction(function () use ($request, $siswaId, $siswaName, $waWali, $tahun, $toDelete, $toInsert, $toKeep, $nominal) {
+            // Delete un-checked months
+            if (!empty($toDelete)) {
+                foreach ($toDelete as $bulanDel) {
+                    LogAktivitas::create([
+                        'type' => 'system',
+                        'title' => 'Pembatalan Infak (Sync)',
+                        'description' => "Penghapusan infak dari $siswaName bulan $bulanDel $tahun",
+                        'amount' => null
+                    ]);
+                }
+
+                Infak::where('siswa_id', $siswaId)
+                     ->where('tahun', $tahun)
+                     ->whereIn('bulan', $toDelete)
+                     ->delete();
             }
 
+            // Insert newly checked months
             foreach ($toInsert as $bulan) {
                 Infak::create([
                     'siswa_id' => $siswaId,
                     'kelas_id' => $request->kelas_id,
-                    'jumlah' => $request->nominal,
+                    'jumlah' => $nominal ?? 0,
                     'bulan' => $bulan,
                     'tahun' => $tahun,
                     'tanggal_bayar' => $request->tanggal_bayar,
@@ -216,16 +233,38 @@ class InfakController extends Controller
                     'type' => 'income',
                     'title' => 'Pemasukan Baru (Sync)',
                     'description' => "Penerimaan infak dari $siswaName untuk bulan $bulan $tahun",
-                    'amount' => $request->nominal
+                    'amount' => $nominal ?? 0
                 ]);
             }
 
-            if ($waWali) {
+            // Perbarui tanggal bayar (dan nominal) bulan yang sudah ada jika diminta.
+            // Untuk kasus telat input: pindahkan tanggal supaya masuk laporan bulan yang benar.
+            if ($request->boolean('update_existing') && !empty($toKeep)) {
+                $updateData = ['tanggal_bayar' => $request->tanggal_bayar];
+                if ($nominal !== null && $nominal > 0) {
+                    $updateData['jumlah'] = $nominal;
+                }
+
+                Infak::where('siswa_id', $siswaId)
+                     ->where('tahun', $tahun)
+                     ->whereIn('bulan', $toKeep)
+                     ->update($updateData);
+
+                LogAktivitas::create([
+                    'type' => 'system',
+                    'title' => 'Perubahan Tanggal Bayar Infak',
+                    'description' => "Tanggal bayar infak $siswaName bulan " . implode(', ', $toKeep) . " $tahun diubah ke " . $request->tanggal_bayar,
+                    'amount' => null
+                ]);
+            }
+
+            // Antrekan Notifikasi WA (dikirim bertahap dengan delay agar tidak keblokir)
+            if (!empty($toInsert) && $waWali) {
                 $bulanStr = implode(', ', $toInsert);
                 $pesan = "terimakasih pak sudah membayar infak atas nama ananda {$siswaName} untuk bulan {$bulanStr} sudah kami terima";
-                \App\Services\WhatsAppService::sendMessage($waWali, $pesan);
+                \App\Services\WhatsAppService::queue($waWali, $pesan, 'terima-kasih');
             }
-        }
+        });
 
         return response()->json(['message' => 'Infak synchronized successfully']);
     }
@@ -275,7 +314,12 @@ class InfakController extends Controller
             $siswas = Siswa::whereNotNull('wa_wali_1')->where('wa_wali_1', '!=', '')->get();
         }
 
-        $sentCount = 0;
+        $queuedCount = 0;
+
+        // Antrean unik per bulan: agar klik Blast kedua kali tidak mengulang
+        // pesan yang sudah dikirim/diantrekan di bulan yang sama.
+        $groupKey = 'tunggakan-' . date('Y-m');
+        $alreadyQueued = \App\Models\WaOutbox::where('group_key', $groupKey)->pluck('phone')->all();
 
         // Map bulan ke angka untuk perbandingan dengan created_at
         $monthToNumber = [
@@ -283,6 +327,12 @@ class InfakController extends Controller
             'November' => 11, 'December' => 12, 'January' => 1, 'February' => 2,
             'March' => 3, 'April' => 4, 'May' => 5, 'June' => 6
         ];
+
+        // 1 query: bulan yang SUDAH dibayar untuk semua siswa (pengganti query per siswa)
+        $paidMonthsBySiswa = Infak::where('tahun', \App\AcademicYear::current())
+            ->whereIn('siswa_id', $siswas->pluck('id'))
+            ->get(['siswa_id', 'bulan'])
+            ->groupBy('siswa_id');
 
         foreach ($siswas as $siswa) {
             // Filter bulan: hanya hitung bulan SETELAH siswa terdaftar di sistem
@@ -304,11 +354,9 @@ class InfakController extends Controller
 
             if (empty($applicableMonths)) continue;
 
-            $paidMonths = Infak::where('siswa_id', $siswa->id)
-                ->where('tahun', $tahun)
-                ->whereIn('bulan', $applicableMonths)
+            $paidMonths = $paidMonthsBySiswa->get($siswa->id, collect())
                 ->pluck('bulan')
-                ->toArray();
+                ->all();
             
             $missedMonths = array_diff($applicableMonths, $paidMonths);
             
@@ -321,13 +369,23 @@ class InfakController extends Controller
 
                 $bulanStr = implode(', ', $indoMonths);
                 $pesan = "Assalamualaikum wr. wb.\nMohon maaf mengganggu waktunya Bapak/Ibu Wali. Kami ingin menginformasikan dengan hormat bahwa tagihan infak atas nama ananda *{$siswa->nama_lengkap}* untuk bulan *{$bulanStr}* saat ini belum tercatat pembayarannya di sistem kami.\n\nMohon perkenannya untuk dapat melunasinya. Jika sudah membayar, mohon abaikan pesan ini. Terima kasih banyak atas kerja samanya. 🙏";
-                
-                \App\Services\WhatsAppService::sendMessage($siswa->wa_wali_1, $pesan);
-                $sentCount++;
+
+                $phone = preg_replace('/[^0-9]/', '', $siswa->wa_wali_1);
+                if ($phone && !in_array($phone, $alreadyQueued)) {
+                    \App\Services\WhatsAppService::queue($phone, $pesan, $groupKey);
+                    $alreadyQueued[] = $phone;
+                    $queuedCount++;
+                }
             }
         }
 
-        return response()->json(['message' => "Blast WA Reminder berhasil dikirim ke {$sentCount} wali santri yang menunggak 2 bulan atau lebih."]);
+        $pending = \App\Services\WhatsAppService::pendingCount();
+
+        return response()->json([
+            'message' => "Blast WA diantrekan ke {$queuedCount} wali santri yang menunggak 2 bulan atau lebih. Pesan dikirim bertahap (antrean: {$pending}).",
+            'queued' => $queuedCount,
+            'remaining' => $pending,
+        ]);
     }
 
     private function mapBulanToEnglish($shortMonth)

@@ -38,11 +38,12 @@
           <button 
             @click="blastWA"
             :disabled="isBlasting"
-            class="flex-1 md:flex-none bg-[#25D366] text-white px-4 py-2 rounded-xl font-label-md text-label-md flex items-center justify-center gap-2 hover:bg-[#128C7E] transition-colors active:scale-95 shadow-sm whitespace-nowrap disabled:opacity-70 disabled:cursor-not-allowed"
+            class="flex-1 md:flex-none bg-[#25D366] text-white px-4 py-2 rounded-xl font-label-md text-label-md flex items-center justify-center gap-2 hover:bg-[#128C7E] transition-colors active:scale-95 whitespace-nowrap disabled:opacity-70 disabled:cursor-not-allowed"
           >
             <span v-if="!isBlasting" class="material-symbols-outlined text-[20px]">campaign</span>
             <span v-else class="material-symbols-outlined animate-spin text-[20px]">sync</span>
-            Blast WA Tunggakan
+            <template v-if="!isBlasting">Blast WA Tunggakan</template>
+            <template v-else>Mengirim {{ blastProgress?.sent ?? 0 }}/{{ blastProgress?.total ?? '...' }} (jeda {{ blastDelay }} dtk)</template>
           </button>
         </div>
         
@@ -177,6 +178,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
 import axios from 'axios';
+import { drainOutbox } from '../../utils/waOutbox';
 
 const months = ['Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des', 'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun'];
 
@@ -185,6 +187,8 @@ const classes = ref([]);
 const isLoading = ref(true);
 const selectedClass = ref('');
 const isBlasting = ref(false);
+const blastProgress = ref(null);
+const blastDelay = ref(60);
 
 const fetchClasses = async () => {
   try {
@@ -236,18 +240,40 @@ const cetakFormSetoran = () => {
 };
 
 const blastWA = async () => {
-  if (!confirm('Anda yakin ingin mengirim pesan WhatsApp penagihan massal ke wali santri yang menunggak 2 bulan atau lebih?')) return;
-  
   if (isBlasting.value) return;
+
+  try {
+    const st = await axios.get('/wa/status');
+    blastDelay.value = st.data.delay || 60;
+  } catch (e) {
+    blastDelay.value = 60;
+  }
+
+  if (!confirm(`Kirim pesan WhatsApp penagihan massal ke wali santri yang menunggak 2 bulan atau lebih?\n\nPesan DIKIRIM BERTAHAP dengan jeda ${blastDelay.value} detik per pesan (agar nomor tidak keblokir). Jangan tutup tab ini sampai proses selesai.`)) return;
+
   isBlasting.value = true;
+  blastProgress.value = null;
   try {
     const res = await axios.post('/infak/blast-wa');
-    alert(res.data.message || 'Blast WA berhasil dikirim.');
+    const queued = res.data.queued ?? 0;
+    const remaining = res.data.remaining ?? 0;
+
+    if (queued === 0 && remaining === 0) {
+      alert(res.data.message || 'Tidak ada pesan baru untuk dikirim.');
+      return;
+    }
+
+    // Kirim antrean bertahap (delay antar pesan dijaga server)
+    await drainOutbox((p) => { blastProgress.value = p; });
+
+    const sent = blastProgress.value?.sent ?? 0;
+    alert(`Blast WA selesai. ${sent} pesan WhatsApp berhasil dikirim ke wali santri.`);
   } catch (error) {
     console.error("Gagal blast WA", error);
     alert(error.response?.data?.message || "Terjadi kesalahan saat mengirim Blast WA.");
   } finally {
     isBlasting.value = false;
+    blastProgress.value = null;
   }
 };
 

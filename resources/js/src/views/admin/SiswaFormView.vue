@@ -53,10 +53,12 @@
         <section v-if="isEdit" class="bg-surface-container-lowest rounded-2xl shadow-sm p-md sm:p-lg border border-surface-variant/50">
           <h2 class="font-headline-md text-[18px] text-primary-container flex items-center gap-xs mb-sm">
             <span class="material-symbols-outlined text-secondary fill">payments</span>
-            Riwayat Infak {{ currentYear }}
+            Riwayat Infak {{ academicYearLabel }}
           </h2>
           <p class="font-body-md text-on-surface-variant mb-md text-sm">
-            Centang bulan yang sudah dibayar. Hilangkan centang untuk membatalkan/menghapus infak bulan tersebut.
+            Centang bulan yang sudah dibayar, hilangkan centang untuk membatalkan.
+            <br><strong>Pindah bulan salah input:</strong> hilangkan centang bulan yang salah, centang bulan yang benar, isi tanggal bayar, lalu simpan.
+            <br><strong>Koreksi tanggal (telat input):</strong> centang opsi "Perbarui tanggal bayar" di bawah lalu simpan.
           </p>
           
           <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2 mb-md">
@@ -76,13 +78,22 @@
           <div class="flex flex-col sm:flex-row gap-sm border-t border-outline-variant pt-sm">
             <div class="flex-1 flex flex-col">
               <label class="font-label-md text-label-md text-on-surface-variant" for="syncNominal">Nominal (Untuk bulan baru)</label>
-              <input v-model="syncForm.nominal" required class="min-h-[48px] px-md py-sm rounded-lg border border-outline-variant bg-surface-container-lowest text-on-surface focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/20 transition-all font-body-md" id="syncNominal" type="number">
+              <input v-model="syncForm.nominal" :required="needsNewMonths" :disabled="!needsNewMonths && !applyExisting" class="min-h-[48px] px-md py-sm rounded-lg border border-outline-variant bg-surface-container-lowest text-on-surface focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/20 transition-all font-body-md disabled:opacity-60" id="syncNominal" type="number" min="0" placeholder="Contoh: 30000">
             </div>
             <div class="flex-1 flex flex-col">
-              <label class="font-label-md text-label-md text-on-surface-variant" for="syncTanggal">Tgl Bayar (Untuk bulan baru)</label>
-              <input v-model="syncForm.tanggal_bayar" required class="min-h-[48px] px-md py-sm rounded-lg border border-outline-variant bg-surface-container-lowest text-on-surface focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/20 transition-all font-body-md" id="syncTanggal" type="date">
+              <label class="font-label-md text-label-md text-on-surface-variant" for="syncTanggal">Tgl Bayar</label>
+              <input v-model="tanggalDisplay" required inputmode="numeric" maxlength="10" placeholder="hh/bb/tttt" @input="onTanggalInput" class="min-h-[48px] px-md py-sm rounded-lg border border-outline-variant bg-surface-container-lowest text-on-surface focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/20 transition-all font-body-md tracking-widest" id="syncTanggal" type="text">
+              <p class="font-label-sm text-label-sm text-on-surface-variant mt-1">Format: tanggal/bulan/tahun (contoh: 01/10/2026)</p>
             </div>
           </div>
+
+          <label class="flex items-start gap-3 mt-sm p-3 rounded-lg border border-outline-variant bg-surface-container-low cursor-pointer hover:bg-surface-variant/50 transition-colors">
+            <input type="checkbox" v-model="applyExisting" class="mt-1 w-5 h-5 accent-primary shrink-0">
+            <span class="font-body-sm text-on-surface-variant">
+              <strong class="text-on-surface">Perbarui tanggal bayar &amp; nominal bulan yang sudah dicentang</strong>
+              <br>Centang opsi ini bila Anda ingin memindahkan tanggal pembayaran bulan yang sudah tercatat (misal: salah input tanggal supaya masuk laporan bulan yang benar).
+            </span>
+          </label>
         </section>
 
 
@@ -156,6 +167,8 @@
 import { ref, reactive, onMounted, computed } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import axios from 'axios';
+import { toDisplayDate, toIsoDate, autoFormatDisplayDate } from '../../utils/date';
+import { drainOutbox } from '../../utils/waOutbox';
 
 const router = useRouter();
 const route = useRoute();
@@ -187,30 +200,58 @@ onMounted(async () => {
       // Fetch Infak for this student
       const infakRes = await axios.get(`/siswa/${studentId.value}/infak?tahun=${currentYear}`);
       const existingInfak = infakRes.data;
-      
+
+      // Reverse map English months to Indonesian
+      const engToIdMap = {
+        'January': 'Jan', 'February': 'Feb', 'March': 'Mar', 'April': 'Apr',
+        'May': 'Mei', 'June': 'Jun', 'July': 'Jul', 'August': 'Agu',
+        'September': 'Sep', 'October': 'Okt', 'November': 'Nov', 'December': 'Des'
+      };
+
+      existingMonths.value = existingInfak.map(i => engToIdMap[i.bulan] || i.bulan);
+      selectedMonths.value = [...existingMonths.value];
+
       if (existingInfak.length > 0) {
-        // Reverse map English months to Indonesian
-        const engToIdMap = {
-          'January': 'Jan', 'February': 'Feb', 'March': 'Mar', 'April': 'Apr',
-          'May': 'Mei', 'June': 'Jun', 'July': 'Jul', 'August': 'Agu',
-          'September': 'Sep', 'October': 'Okt', 'November': 'Nov', 'December': 'Des'
-        };
-        
-        selectedMonths.value = existingInfak.map(i => engToIdMap[i.bulan] || i.bulan);
-        
         // Auto-fill form from latest record
         syncForm.nominal = existingInfak[0].jumlah;
-        syncForm.tanggal_bayar = existingInfak[0].tanggal_bayar;
+        syncForm.tanggal_bayar = String(existingInfak[0].tanggal_bayar || '').slice(0, 10);
       }
+      tanggalDisplay.value = toDisplayDate(syncForm.tanggal_bayar) || toDisplayDate(new Date().toISOString().split('T')[0]);
     }
   } catch (err) {
     console.error("Gagal mengambil data", err);
+    alert('Gagal memuat data siswa. Silakan coba lagi.');
   }
 });
 
-const monthsList = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+// Urut sesuai tahun ajaran: Jul s/d Jun
+const monthsList = ['Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des', 'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun'];
 const currentYear = new Date().getFullYear();
+const academicYearLabel = (() => {
+  const now = new Date();
+  const start = now.getMonth() >= 6 ? now.getFullYear() : now.getFullYear() - 1;
+  return `${start}/${start + 1}`;
+})();
 const selectedMonths = ref([]);
+const existingMonths = ref([]);
+const applyExisting = ref(false);
+const tanggalDisplay = ref('');
+
+const onTanggalInput = () => {
+  tanggalDisplay.value = autoFormatDisplayDate(tanggalDisplay.value);
+};
+
+const needsNewMonths = computed(() =>
+  selectedMonths.value.some(m => !existingMonths.value.includes(m))
+);
+
+const extractError = (error) => {
+  const data = error.response?.data;
+  if (!data) return 'Koneksi gagal atau sesi berakhir. Silakan login ulang.';
+  if (data.message && !data.errors) return data.message;
+  if (data.errors) return Object.values(data.errors).flat().join('\n');
+  return 'Terjadi kesalahan tidak diketahui.';
+};
 
 const syncForm = reactive({
   nominal: '',
@@ -229,6 +270,19 @@ const form = reactive({
 });
 
 const saveSiswa = async () => {
+  if (isEdit.value) {
+    const isoTanggal = toIsoDate(tanggalDisplay.value);
+    if (!isoTanggal) {
+      alert('Tanggal bayar tidak valid. Gunakan format tanggal/bulan/tahun, contoh 01/10/2026.');
+      return;
+    }
+    if (needsNewMonths.value && !(Number(syncForm.nominal) > 0)) {
+      alert('Nominal wajib diisi karena ada bulan baru yang dicentang.');
+      return;
+    }
+    syncForm.tanggal_bayar = isoTanggal;
+  }
+
   isSubmitting.value = true;
   
   try {
@@ -246,15 +300,25 @@ const saveSiswa = async () => {
     if (isEdit.value) {
       await axios.put(`/siswa/${studentId.value}`, payload);
       
-      // Sync Infak
-      await axios.post('/infak/sync', {
-        siswa_id: studentId.value,
-        kelas_id: form.kelas_id,
-        tahun: currentYear,
-        months: selectedMonths.value,
-        nominal: syncForm.nominal || 0,
-        tanggal_bayar: syncForm.tanggal_bayar
-      });
+      // Sync Infak (tambah/hapus/pindah bulan & opsi perbarui tanggal)
+      try {
+        await axios.post('/infak/sync', {
+          siswa_id: studentId.value,
+          kelas_id: form.kelas_id,
+          tahun: currentYear,
+          months: selectedMonths.value,
+          nominal: syncForm.nominal || 0,
+          tanggal_bayar: syncForm.tanggal_bayar,
+          update_existing: applyExisting.value
+        });
+      } catch (syncError) {
+        console.error("Sync infak gagal:", syncError);
+        alert('Data siswa tersimpan, tetapi sinkronisasi infak GAGAL:\n\n' + extractError(syncError));
+        return;
+      }
+
+      // Kirim konfirmasi WA ke wali secara bertahap (dengan delay) di background
+      drainOutbox().catch(() => {});
     } else {
       await axios.post('/siswa', payload);
     }
@@ -264,8 +328,8 @@ const saveSiswa = async () => {
       router.push('/admin/siswa');
     }, 1500);
   } catch (error) {
-    console.error("Failed to add siswa:", error);
-    alert("Gagal menambah data siswa. Pastikan form terisi dengan benar.");
+    console.error("Failed to save siswa:", error);
+    alert("Gagal menyimpan data siswa:\n\n" + extractError(error));
   } finally {
     isSubmitting.value = false;
   }

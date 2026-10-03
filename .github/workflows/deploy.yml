@@ -81,4 +81,9 @@ jobs:
             rm -f deploy.zip
             php artisan migrate --force
             php artisan optimize:clear
+            # Cache config & view agar booting Laravel jauh lebih cepat di shared hosting.
+            # Sengaja TIDAK pakai route:cache karena masih ada route closure (akan gagal
+            # dan membiarkan site stuck di mode maintenance).
+            php artisan config:cache
+            php artisan view:cache
             php artisan up || true
