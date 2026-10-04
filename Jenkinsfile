@@ -26,6 +26,13 @@ pipeline {
             }
         }
 
+        stage('Build Frontend') {
+            steps {
+                sh 'npm ci'
+                sh 'npm run build'
+            }
+        }
+
         stage('CI - Test') {
             steps {
                 sh 'composer install --no-interaction --no-progress --prefer-dist'
@@ -35,12 +42,7 @@ pipeline {
             }
         }
 
-        stage('Build Frontend') {
-            steps {
-                sh 'npm ci'
-                sh 'npm run build'
-            }
-        }
+        
 
         stage('Deploy to cPanel') {
             steps {
