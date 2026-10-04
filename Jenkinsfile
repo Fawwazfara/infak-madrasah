@@ -46,7 +46,7 @@ pipeline {
 
         stage('Deploy to cPanel') {
             steps {
-                sshagent(credentials: ['cpanel-ssh-key']) {
+                sshagent(credentials: ['assajjad-jenkins']) {
                     sh """
                         set -e
                         SSH_OPTS="-o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=15"
@@ -79,7 +79,7 @@ pipeline {
         }
         failure {
             echo "--- [FAILURE] Deploy gagal — site dikembalikan dari mode maintenance ---"
-            sshagent(credentials: ['cpanel-ssh-key']) {
+            sshagent(credentials: ['assajjad-jenkins']) {
                 sh """
                     SSH_OPTS="-o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=15"
                     ssh \$SSH_OPTS -p "${SSH_PORT}" ${SSH_USER}@${SSH_HOST} "cd ${DEPLOY_PATH} && php artisan up" || true
