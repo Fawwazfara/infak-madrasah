@@ -102,7 +102,11 @@ class InfakController extends Controller
                 // Antrekan Notifikasi WA (dikirim bertahap dengan delay agar tidak keblokir)
                 if ($waWali) {
                     $bulanStr = implode(', ', $bulanArray);
-                    $pesan = "terimakasih pak sudah membayar infak atas nama ananda {$siswaName} untuk bulan {$bulanStr} sudah kami terima";
+                    $pesan = "Assalamu'alaikum Wr. Wb.\n\n"
+                        . "Kami dari Madrasah As-Sajjaad memberitahukan bahwa infak ananda *{$siswaName}* untuk bulan *{$bulanStr}* sudah kami terima.\n\n"
+                        . "Terima kasih atas kepercayaan dan kebaikan Bapak/Ibu. Semoga Allah melipatgandakan pahalanya dan memberkahi rezeki keluarga.\n\n"
+                        . "Wassalamu'alaikum Wr. Wb.\n"
+                        . "Tata Usaha Madrasah As-Sajjaad";
                     \App\Services\WhatsAppService::queue($waWali, $pesan, 'terima-kasih');
                 }
             }
@@ -135,12 +139,37 @@ class InfakController extends Controller
             'tahun' => 'required|numeric',
         ]);
 
-        $infak = Infak::findOrFail($id);
+        $infak = Infak::with('siswa')->findOrFail($id);
+
+        $oldTanggal = substr((string) $infak->tanggal_bayar, 0, 10);
+        $oldJumlah = (float) $infak->jumlah;
+
         $infak->update([
             'tanggal_bayar' => $request->tanggal_bayar,
             'jumlah' => $request->jumlah,
             'bulan' => $request->bulan,
             'tahun' => $request->tahun,
+        ]);
+
+        $siswaName = $infak->siswa ? $infak->siswa->nama_lengkap : 'Siswa Tidak Diketahui';
+        $newTanggal = substr((string) $request->tanggal_bayar, 0, 10);
+        $newJumlah = (float) $request->jumlah;
+
+        $changes = [];
+        if ($oldTanggal !== $newTanggal) {
+            $changes[] = "tanggal $oldTanggal -> $newTanggal";
+        }
+        if ($oldJumlah !== $newJumlah) {
+            $changes[] = 'nominal Rp' . number_format($oldJumlah, 0, ',', '.')
+                . ' -> Rp' . number_format($newJumlah, 0, ',', '.');
+        }
+
+        LogAktivitas::create([
+            'type' => 'system',
+            'title' => 'Edit Data Infak',
+            'description' => 'Edit infak ' . $siswaName . ' bulan ' . $infak->bulan . ' ' . $infak->tahun
+                . ($changes ? ': ' . implode(', ', $changes) : ': tidak ada perubahan nilai'),
+            'amount' => null,
         ]);
 
         return response()->json(['message' => 'Infak updated successfully']);
@@ -261,7 +290,11 @@ class InfakController extends Controller
             // Antrekan Notifikasi WA (dikirim bertahap dengan delay agar tidak keblokir)
             if (!empty($toInsert) && $waWali) {
                 $bulanStr = implode(', ', $toInsert);
-                $pesan = "terimakasih pak sudah membayar infak atas nama ananda {$siswaName} untuk bulan {$bulanStr} sudah kami terima";
+                $pesan = "Assalamu'alaikum Wr. Wb.\n\n"
+                    . "Kami dari Madrasah As-Sajjaad memberitahukan bahwa infak ananda *{$siswaName}* untuk bulan *{$bulanStr}* sudah kami terima.\n\n"
+                    . "Terima kasih atas kepercayaan dan kebaikan Bapak/Ibu. Semoga Allah melipatgandakan pahalanya dan memberkahi rezeki keluarga.\n\n"
+                    . "Wassalamu'alaikum Wr. Wb.\n"
+                    . "Tata Usaha Madrasah As-Sajjaad";
                 \App\Services\WhatsAppService::queue($waWali, $pesan, 'terima-kasih');
             }
         });
@@ -368,7 +401,13 @@ class InfakController extends Controller
                 }, $missedMonths);
 
                 $bulanStr = implode(', ', $indoMonths);
-                $pesan = "Assalamualaikum wr. wb.\nMohon maaf mengganggu waktunya Bapak/Ibu Wali. Kami ingin menginformasikan dengan hormat bahwa tagihan infak atas nama ananda *{$siswa->nama_lengkap}* untuk bulan *{$bulanStr}* saat ini belum tercatat pembayarannya di sistem kami.\n\nMohon perkenannya untuk dapat melunasinya. Jika sudah membayar, mohon abaikan pesan ini. Terima kasih banyak atas kerja samanya. 🙏";
+                $pesan = "Assalamu'alaikum Wr. Wb.\n\n"
+                    . "Bapak/Ibu Wali yang kami hormati, perkenalkan kami dari Tata Usaha Madrasah As-Sajjaad. Mohon maaf mengganggu waktunya.\n\n"
+                    . "Kami ingin menyampaikan informasi dengan hormat bahwa infak ananda *{$siswa->nama_lengkap}* untuk bulan *{$bulanStr}* belum tercatat di sistem kami.\n\n"
+                    . "Apabila berkenan, kami mohon bantuan Bapak/Ibu untuk dapat menyelesaikannya. Namun jika sudah melakukan pembayaran, mohon abaikan pesan ini dan mohon maaf atas ketidaknyamanannya.\n\n"
+                    . "Terima kasih banyak atas perhatian dan kerja samanya. Semoga Allah senantiasa memberi kelancaran dan keberkahan rezeki untuk keluarga Bapak/Ibu. 🙏\n\n"
+                    . "Wassalamu'alaikum Wr. Wb.\n"
+                    . "Tata Usaha Madrasah As-Sajjaad";
 
                 $phone = preg_replace('/[^0-9]/', '', $siswa->wa_wali_1);
                 if ($phone && !in_array($phone, $alreadyQueued)) {

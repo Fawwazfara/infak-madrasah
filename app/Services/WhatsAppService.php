@@ -13,19 +13,20 @@ class WhatsAppService
      * Kirim pesan WhatsApp langsung via Fonnte API (tanpa jeda).
      * Panggil hanya lewat process() agar delay antar pesan selalu terjaga.
      *
-     * @return bool
+     * @return string|null null = terkirim, 'retry' = gagal sementara (jaringan/Fonnte down,
+     *                     'failed' = gagal permanen (nomor/token salah)
      */
-    public static function sendMessage($phone, $message)
+    public static function sendMessage($phone, $message): ?string
     {
         $token = config('services.fonnte.token');
 
         if (empty($token)) {
             Log::warning('Fonnte token is missing. WhatsApp message not sent.');
-            return false;
+            return 'retry';
         }
 
         if (empty($phone)) {
-            return false;
+            return 'failed';
         }
 
         $phone = preg_replace('/[^0-9]/', '', $phone);
@@ -42,28 +43,46 @@ class WhatsAppService
 
             if ($response->successful()) {
                 Log::info("WhatsApp message sent to {$phone}", ['response' => $response->json()]);
-                return true;
+                return null;
             }
 
             Log::error("Failed to send WhatsApp message to {$phone}", ['response' => $response->json()]);
-            return false;
+            $status = $response->status();
+            // 5xx / 429 = gangguan sementara (Fonnte down / rate limit) -> coba lagi nanti.
+            // 4xx lainnya = permanen (token/nomor salah) -> tandai failed.
+            return ($status >= 500 || $status === 429) ? 'retry' : 'failed';
         } catch (\Exception $e) {
             Log::error("Exception when sending WhatsApp message to {$phone}: " . $e->getMessage());
-            return false;
+            return 'retry';
         }
     }
 
     /**
      * Antrekan pesan ke outbox (tidak langsung dikirim).
+     *
+     * Sengaja tidak pernah melempar error:
+     * - FONNTE_TOKEN kosong -> tidak ada baris sama sekali (fitur WA dormant);
+     * - gagal menulis tabel wa_outbox (mis. belum termigrasi) -> hanya log error.
+     * Dengan begitu masalah WA tidak pernah memblokir penyimpanan infak.
      */
-    public static function queue(string $phone, string $message, ?string $groupKey = null): WaOutbox
+    public static function queue(string $phone, string $message, ?string $groupKey = null): ?WaOutbox
     {
-        return WaOutbox::create([
-            'phone' => $phone,
-            'message' => $message,
-            'group_key' => $groupKey,
-            'status' => 'pending',
-        ]);
+        if (empty(config('services.fonnte.token'))) {
+            Log::info('FONNTE_TOKEN kosong: pesan WA tidak diantrekan.', ['phone' => $phone]);
+            return null;
+        }
+
+        try {
+            return WaOutbox::create([
+                'phone' => $phone,
+                'message' => $message,
+                'group_key' => $groupKey,
+                'status' => 'pending',
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('Gagal menulis wa_outbox: ' . $e->getMessage());
+            return null;
+        }
     }
 
     public static function pendingCount(): int
@@ -91,6 +110,9 @@ class WhatsAppService
      * belum tercapai, metode ini langsung mengembalikan retry_after dan
      * frontend yang menunggu, sehingga server tetap responsif.
      *
+     * Token kosong -> antrean tidak disentuh (tetap pending, terkirim otomatis
+     * saat token dipasang lagi). Kegagalan sementara juga tetap pending.
+     *
      * @return array{sent:int, failed:int, remaining:int, retry_after:int}
      */
     public static function process(int $limit = 1): array
@@ -98,6 +120,16 @@ class WhatsAppService
         $limit = max(1, min(3, $limit));
         $sent = 0;
         $failed = 0;
+
+        // FONNTE_TOKEN belum dipasang: jangan sentuh antrean sama sekali.
+        if (empty(config('services.fonnte.token'))) {
+            return [
+                'sent' => 0,
+                'failed' => 0,
+                'remaining' => self::pendingCount(),
+                'retry_after' => self::retryAfter(),
+            ];
+        }
 
         // Kunci antar tab/pengguna: mencegah dua request mengirim bersamaan
         // dan melanggar jeda delay. Kunci kedaluwarsa otomatis (10 dtk).
@@ -116,15 +148,20 @@ class WhatsAppService
                         break;
                     }
 
-                    $ok = self::sendMessage($item->phone, $item->message);
+                    $result = self::sendMessage($item->phone, $item->message);
 
                     Cache::put('fonnte_last_sent_at', time(), 60 * 60);
 
-                    if ($ok) {
+                    if ($result === null) {
                         $item->update(['status' => 'sent', 'sent_at' => now()]);
                         $sent++;
+                    } elseif ($result === 'retry') {
+                        // Gangguan sementara: biarkan pending, dicoba lagi pada
+                        // drain berikutnya (jeda tetap berlaku berkat cache di atas).
+                        $item->update(['error' => 'Gagal sementara (jaringan/Fonnte?), akan dicoba lagi.']);
+                        break;
                     } else {
-                        $item->update(['status' => 'failed', 'error' => 'Fonnte mengembalikan error, cek token/koneksi.']);
+                        $item->update(['status' => 'failed', 'error' => 'Fonnte mengembalikan error, cek token/nomor.']);
                         $failed++;
                     }
 

@@ -70,6 +70,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/log-aktivitas/clear', [RiwayatController::class, 'clear']);
 
     Route::get('/laporan', [LaporanController::class, 'index']);
+    Route::get('/laporan/detail', [LaporanController::class, 'detailKelas']);
     Route::get('/laporan/cetak-pdf', [LaporanController::class, 'cetakPdf']);
     Route::get('/kelas/{id}/form-setoran', [LaporanController::class, 'cetakFormSetoran']);
 

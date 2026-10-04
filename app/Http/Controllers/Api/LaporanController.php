@@ -50,6 +50,69 @@ class LaporanController extends Controller
     }
 
     /**
+     * Rincian pemasukan satu kelas pada bulan laporan: daftar siswa yang
+     * membayar (nama, tanggal, nominal). Dipakai drill-down "Pemasukan per
+     * Kelas" di frontend; rentang tanggal dihitung sama dengan hitungLaporan
+     * supaya totalnya konsisten dengan angka di tabel.
+     */
+    public function detailKelas(Request $request)
+    {
+        $request->validate([
+            'bulan' => 'required|string',
+            'kelas_id' => 'required|integer|exists:kelas,id',
+        ]);
+
+        $kelas = Kelas::findOrFail($request->kelas_id);
+        [$periodeMulai, $periodeAkhir] = $this->periodeDariBulan($request->bulan);
+
+        $rows = Infak::with('siswa')
+            ->where('kelas_id', $kelas->id)
+            ->whereBetween('tanggal_bayar', [$periodeMulai, $periodeAkhir])
+            ->get()
+            ->sortBy(fn ($i) => $i->siswa ? $i->siswa->nama_lengkap : '')
+            ->values()
+            ->map(fn ($i) => [
+                'siswa' => $i->siswa ? $i->siswa->nama_lengkap : 'Siswa Tidak Diketahui',
+                'tanggal_bayar' => substr((string) $i->tanggal_bayar, 0, 10),
+                'jumlah' => (float) $i->jumlah,
+                'bulan' => $i->bulan,
+            ]);
+
+        return response()->json([
+            'kelas' => $kelas->nama_kelas,
+            'bulan' => $request->bulan,
+            'jumlah_transaksi' => $rows->count(),
+            'total' => $rows->sum('jumlah'),
+            'rows' => $rows,
+        ]);
+    }
+
+    /**
+     * Nama bulan (ID/EN) -> rentang tanggal bulan berjalan (tahun kaliner),
+     * sama seperti perhitungan laporan utama.
+     *
+     * @return array{0: string, 1: string} [periodeMulai, periodeAkhir] (Y-m-d)
+     */
+    private function periodeDariBulan(string $bulan): array
+    {
+        $bulanIndoKeBulanAngka = [
+            'Januari' => '01', 'Februari' => '02', 'Maret' => '03', 'April' => '04',
+            'Mei' => '05', 'Juni' => '06', 'Juli' => '07', 'Agustus' => '08',
+            'September' => '09', 'Oktober' => '10', 'November' => '11', 'Desember' => '12',
+            'January' => '01', 'February' => '02', 'March' => '03', 'May' => '05',
+            'June' => '06', 'July' => '07', 'August' => '08', 'October' => '10', 'December' => '12'
+        ];
+
+        $bulanAngka = $bulanIndoKeBulanAngka[$bulan] ?? date('m');
+        $tahun = date('Y'); // Asumsi tahun ini (sama dengan laporan lama)
+
+        $periodeMulai = \Carbon\Carbon::createFromDate((int) $tahun, (int) $bulanAngka, 1)->startOfMonth()->toDateString();
+        $periodeAkhir = \Carbon\Carbon::createFromDate((int) $tahun, (int) $bulanAngka, 1)->endOfMonth()->toDateString();
+
+        return [$periodeMulai, $periodeAkhir];
+    }
+
+    /**
      * Hitung laporan keuangan satu bulan: pemasukan per kelas (1 query grup,
      * bukan 1 query per kelas) + daftar pengeluaran.
      */
@@ -64,19 +127,7 @@ class LaporanController extends Controller
             return $kelasOrder[$k->nama_kelas] ?? 99;
         })->values();
 
-        $bulanIndoKeBulanAngka = [
-            'Januari' => '01', 'Februari' => '02', 'Maret' => '03', 'April' => '04',
-            'Mei' => '05', 'Juni' => '06', 'Juli' => '07', 'Agustus' => '08',
-            'September' => '09', 'Oktober' => '10', 'November' => '11', 'Desember' => '12',
-            'January' => '01', 'February' => '02', 'March' => '03', 'May' => '05',
-            'June' => '06', 'July' => '07', 'August' => '08', 'October' => '10', 'December' => '12'
-        ];
-
-        $bulanAngka = $bulanIndoKeBulanAngka[$bulan] ?? date('m');
-        $tahun = date('Y'); // Asumsi tahun ini
-
-        $periodeMulai = \Carbon\Carbon::createFromDate((int) $tahun, (int) $bulanAngka, 1)->startOfMonth()->toDateString();
-        $periodeAkhir = \Carbon\Carbon::createFromDate((int) $tahun, (int) $bulanAngka, 1)->endOfMonth()->toDateString();
+        [$periodeMulai, $periodeAkhir] = $this->periodeDariBulan($bulan);
 
         // Satu query agregat GROUP BY kelas_id untuk seluruh kelas
         $sumPerKelas = Infak::whereIn('kelas_id', $kelasList->pluck('id'))
@@ -92,6 +143,7 @@ class LaporanController extends Controller
             $nominal = $sumPerKelas[$kelas->id] ?? 0;
 
             $pemasukanPerKelas[] = [
+                'kelas_id' => $kelas->id,
                 'kelas' => $kelas->nama_kelas,
                 'nominal' => $nominal
             ];

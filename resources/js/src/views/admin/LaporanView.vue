@@ -97,16 +97,70 @@
         >
           <h3 class="hidden md:block font-headline-sm text-on-surface mb-2">Pemasukan per Kelas</h3>
           <div class="flex flex-col gap-3">
-            <div 
-              v-for="item in pemasukanList" 
-              :key="item.kelas"
-              class="bg-surface-container-lowest border border-outline-variant/30 rounded-2xl p-4 flex items-center gap-4 shadow-sm"
-            >
-              <div class="w-10 h-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
-                <span class="material-symbols-outlined">account_balance_wallet</span>
+            <div v-for="item in pemasukanList" :key="item.kelas_id" class="flex flex-col">
+              <button
+                type="button"
+                @click="toggleDetail(item)"
+                :aria-expanded="openKelasId === item.kelas_id"
+                class="w-full bg-surface-container-lowest border border-outline-variant/30 rounded-2xl p-4 flex items-center gap-4 shadow-sm cursor-pointer hover:bg-surface-container-high transition-colors text-left"
+              >
+                <div class="w-10 h-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                  <span class="material-symbols-outlined">account_balance_wallet</span>
+                </div>
+                <span class="font-label-md text-[15px] font-semibold text-on-surface flex-1">{{ item.kelas }}</span>
+                <span class="font-label-md text-[16px] font-bold text-primary shrink-0">Rp {{ formatRupiah(item.nominal) }}</span>
+                <span
+                  class="material-symbols-outlined text-[20px] text-on-surface-variant transition-transform shrink-0"
+                  :class="{ 'rotate-180': openKelasId === item.kelas_id }"
+                >expand_more</span>
+              </button>
+
+              <!-- Rincian: siapa saja yang membayar di kelas ini -->
+              <div
+                v-if="openKelasId === item.kelas_id"
+                class="mt-2 ml-4 pl-4 border-l-4 border-primary/40 flex flex-col gap-2"
+              >
+                <div v-if="detailLoading" class="flex items-center gap-2 py-3 text-on-surface-variant">
+                  <span class="material-symbols-outlined animate-spin text-[18px]">sync</span>
+                  <span class="font-label-sm text-label-sm">Memuat rincian pembayaran...</span>
+                </div>
+
+                <div v-else-if="detailError" class="py-3 font-label-sm text-label-sm text-error">
+                  {{ detailError }}
+                </div>
+
+                <template v-else-if="detailData">
+                  <div class="flex items-center justify-between py-1">
+                    <span class="font-label-sm text-label-sm text-on-surface-variant">
+                      {{ detailData.jumlah_transaksi }} pembayaran &middot; {{ detailData.bulan }}
+                    </span>
+                    <span class="font-label-sm text-label-sm font-bold text-primary">
+                      Rp {{ formatRupiah(detailData.total) }}
+                    </span>
+                  </div>
+
+                  <div
+                    v-for="(row, idx) in detailData.rows"
+                    :key="idx"
+                    class="bg-surface-container-lowest border border-outline-variant/30 rounded-xl p-3 flex items-center gap-3 shadow-sm"
+                  >
+                    <div class="w-9 h-9 rounded-full bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                      <span class="material-symbols-outlined text-[18px]">person</span>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                      <p class="font-label-md text-[14px] font-semibold text-on-surface truncate">{{ row.siswa }}</p>
+                      <p class="font-label-sm text-label-sm text-on-surface-variant">
+                        {{ formatTanggal(row.tanggal_bayar) }} &middot; {{ row.bulan }}
+                      </p>
+                    </div>
+                    <span class="font-label-md text-[15px] font-bold text-primary shrink-0">Rp {{ formatRupiah(row.jumlah) }}</span>
+                  </div>
+
+                  <p v-if="!detailData.rows.length" class="font-label-sm text-label-sm text-on-surface-variant italic py-2">
+                    Belum ada pembayaran tercatat untuk bulan ini.
+                  </p>
+                </template>
               </div>
-              <span class="font-label-md text-[15px] font-semibold text-on-surface flex-1">{{ item.kelas }}</span>
-              <span class="font-label-md text-[16px] font-bold text-primary shrink-0">Rp {{ formatRupiah(item.nominal) }}</span>
             </div>
           </div>
         </div>
@@ -174,6 +228,37 @@ const totalPemasukan = ref(0);
 const totalPengeluaran = ref(0);
 const isLoading = ref(false);
 
+// Drill-down "Pemasukan per Kelas": daftar siapa saja yang bayar
+const openKelasId = ref(null);
+const detailData = ref(null);
+const detailLoading = ref(false);
+const detailError = ref('');
+
+const toggleDetail = async (item) => {
+  if (openKelasId.value === item.kelas_id) {
+    openKelasId.value = null;
+    detailData.value = null;
+    detailError.value = '';
+    return;
+  }
+  const requestedId = item.kelas_id;
+  openKelasId.value = requestedId;
+  detailData.value = null;
+  detailError.value = '';
+  detailLoading.value = true;
+  try {
+    const res = await axios.get('/laporan/detail', {
+      params: { bulan: activeMonth.value, kelas_id: requestedId }
+    });
+    if (openKelasId.value === requestedId) detailData.value = res.data;
+  } catch (err) {
+    console.error('Gagal mengambil rincian laporan', err);
+    if (openKelasId.value === requestedId) detailError.value = 'Gagal memuat rincian pembayaran. Coba lagi.';
+  } finally {
+    if (openKelasId.value === requestedId) detailLoading.value = false;
+  }
+};
+
 const saldoAkhir = computed(() => {
   return totalPemasukan.value - totalPengeluaran.value;
 });
@@ -194,6 +279,10 @@ const fetchLaporan = async () => {
 };
 
 watch(activeMonth, () => {
+  // Bulan berganti -> rincian kelas sebelumnya tidak relevan lagi
+  openKelasId.value = null;
+  detailData.value = null;
+  detailError.value = '';
   fetchLaporan();
 });
 
@@ -238,6 +327,13 @@ const getMonthShort = (dateStr) => {
   const date = new Date(dateStr);
   const m = date.toLocaleString('id-ID', { month: 'short' });
   return m.replace('.', '');
+};
+
+// "2026-09-05" -> "5 Sep 2026"
+const formatTanggal = (dateStr) => {
+  if (!dateStr) return '-';
+  const [y, , d] = dateStr.split('-');
+  return `${parseInt(d, 10)} ${getMonthShort(dateStr)} ${y}`;
 };
 
 const formatRupiah = (angka) => {

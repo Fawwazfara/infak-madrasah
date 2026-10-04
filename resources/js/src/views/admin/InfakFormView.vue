@@ -182,18 +182,13 @@
               <label class="font-label-md text-label-md text-on-surface" for="tanggal">Tanggal Bayar</label>
               <div class="relative">
                 <input
-                  v-model="tanggalDisplay"
+                  v-model="form.tanggal"
                   required
-                  inputmode="numeric"
-                  maxlength="10"
-                  placeholder="hh/bb/tttt"
-                  @input="onTanggalInput"
-                  class="w-full h-12 rounded-xl border-outline-variant text-on-surface bg-surface-bright focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/20 pl-4 pr-10 font-body-md text-body-md transition-all block tracking-widest"
+                  type="date"
+                  class="w-full h-12 rounded-xl border-outline-variant text-on-surface bg-surface-bright focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/20 pl-4 pr-4 font-body-md text-body-md transition-all block"
                   id="tanggal"
-                  type="text"
                 >
               </div>
-              <p class="font-label-sm text-label-sm text-on-surface-variant">Format: tanggal/bulan/tahun (contoh: 01/10/2026)</p>
             </div>
             
             <div class="flex flex-col gap-xs">
@@ -263,7 +258,6 @@
 import { ref, reactive, computed, onMounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import axios from 'axios';
-import { toDisplayDate, toIsoDate, autoFormatDisplayDate } from '../../utils/date';
 import { drainOutbox } from '../../utils/waOutbox';
 
 const router = useRouter();
@@ -282,12 +276,6 @@ const form = reactive({
   nominal: 30000,
   selectedMonths: []
 });
-
-const tanggalDisplay = ref('');
-
-const onTanggalInput = () => {
-  tanggalDisplay.value = autoFormatDisplayDate(tanggalDisplay.value);
-};
 
 const kelasi = ref([]);
 const students = ref([]);
@@ -345,7 +333,6 @@ onMounted(async () => {
   // Set default date to today
   const today = new Date();
   form.tanggal = today.toISOString().split('T')[0];
-  tanggalDisplay.value = toDisplayDate(form.tanggal);
 
   try {
     const res = await axios.get('/kelas');
@@ -463,12 +450,11 @@ const saveTransaction = async () => {
     return;
   }
 
-  const isoTanggal = toIsoDate(tanggalDisplay.value);
+  const isoTanggal = form.tanggal;
   if (!isoTanggal) {
-    alert("Tanggal bayar tidak valid. Gunakan format tanggal/bulan/tahun, contoh 01/10/2026.");
+    alert("Tanggal bayar belum diisi.");
     return;
   }
-  form.tanggal = isoTanggal;
 
   if(!form.kelas_id) {
     alert("Lengkapi semua field yang diperlukan!");
@@ -515,7 +501,6 @@ const saveTransaction = async () => {
       form.selectedMonths = [];
       form.nominal = 30000;
       form.tanggal = new Date().toISOString().split('T')[0];
-      tanggalDisplay.value = toDisplayDate(form.tanggal);
     }, 1500);
   } catch (error) {
     console.error(error);

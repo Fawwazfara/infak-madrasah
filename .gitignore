@@ -1,5 +1,7 @@
 *.zip
+*.phar
 *.txt
+!public/robots.txt
 response.json
 *.log
 .DS_Store
@@ -28,4 +30,3 @@ _ide_helper.php
 Homestead.json
 Homestead.yaml
 Thumbs.db
-deploy_wa.zip
