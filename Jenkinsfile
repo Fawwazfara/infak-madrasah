@@ -1,7 +1,7 @@
 // Declarative Pipeline — deploy Infak Madrasah (Laravel) ke cPanel via SSH
 // Prasyarat Jenkins: plugin "SSH Agent" + credential ID persis "cpanel-ssh-key"
 // (Credentials > Add > "SSH Username with private key"), job bertipe
-// "Pipeline script from SCM" agar `checkout scm` berfungsi.
+// Pipeline script from SCM - Deploy Infak Madrasah (Laravel) ke cPanel via SSH
 pipeline {
     agent any
 
@@ -42,20 +42,18 @@ pipeline {
             }
         }
 
-        
-
         stage('Deploy to cPanel') {
             steps {
-                sshagent(credentials: ['assajjad-jenkins']) {
-                    sh """
+                withCredentials([sshUserPrivateKey(credentialsId: 'assajjad-jenkins', keyFileVariable: 'SSH_KEY')]) {
+                    sh '''
                         set -e
-                        SSH_OPTS="-o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=15"
+                        SSH_OPTS="-i $SSH_KEY -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=15"
 
                         echo "--- [CD] Upload hasil build frontend (public/build) ---"
-                        scp \$SSH_OPTS -P "${SSH_PORT}" -r public/build ${SSH_USER}@${SSH_HOST}:${DEPLOY_PATH}/public/
+                        scp $SSH_OPTS -P "${SSH_PORT}" -r public/build "${SSH_USER}@${SSH_HOST}:${DEPLOY_PATH}/public/"
 
                         echo "--- [CD] Deploy kode, migrasi, dan cache di server ---"
-                        ssh \$SSH_OPTS -p "${SSH_PORT}" ${SSH_USER}@${SSH_HOST} '
+                        ssh $SSH_OPTS -p "${SSH_PORT}" "${SSH_USER}@${SSH_HOST}" "
                             set -e
                             cd ${DEPLOY_PATH}
                             php artisan down || true
@@ -66,8 +64,8 @@ pipeline {
                             php artisan config:cache
                             php artisan view:cache
                             php artisan up || true
-                        '
-                    """
+                        "
+                    '''
                 }
             }
         }
@@ -79,11 +77,11 @@ pipeline {
         }
         failure {
             echo "--- [FAILURE] Deploy gagal — site dikembalikan dari mode maintenance ---"
-            sshagent(credentials: ['assajjad-jenkins']) {
-                sh """
-                    SSH_OPTS="-o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=15"
-                    ssh \$SSH_OPTS -p "${SSH_PORT}" ${SSH_USER}@${SSH_HOST} "cd ${DEPLOY_PATH} && php artisan up" || true
-                """
+            withCredentials([sshUserPrivateKey(credentialsId: 'assajjad-jenkins', keyFileVariable: 'SSH_KEY')]) {
+                sh '''
+                    SSH_OPTS="-i $SSH_KEY -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=15"
+                    ssh $SSH_OPTS -p "${SSH_PORT}" "${SSH_USER}@${SSH_HOST}" "cd ${DEPLOY_PATH} && php artisan up" || true
+                '''
             }
         }
     }
