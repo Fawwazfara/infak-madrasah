@@ -22,5 +22,17 @@ export default defineConfig({
             vue: 'vue/dist/vue.esm-bundler.js',
             '@': '/resources/js/src'
         }
-    }
+    },
+    build: {
+        rollupOptions: {
+            output: {
+                manualChunks: {
+                    'vendor-vue': ['vue', 'vue-router', 'pinia'],
+                    'vendor-axios': ['axios'],
+                    'vendor-charts': ['chart.js', 'vue-chartjs'],
+                },
+            },
+        },
+        chunkSizeWarningLimit: 1000,
+    },
 });

@@ -15,60 +15,67 @@ class SiswaController extends Controller
     {
         $user = $request->user();
         $tahunAjaran = \App\AcademicYear::current();
+        $perPage = (int) $request->query('per_page', 0); // 0 = all (backward compatible), >0 = paginate
 
-        // Filter infak ke tahun ajaran berjalan: grid hanya menampilkan bulan
-        // tahun ajaran ini, jadi baris tahun-tahun lalu tidak perlu dimuat.
         $query = Siswa::with(['kelas', 'infaks' => function ($q) use ($tahunAjaran) {
             $q->where('tahun', $tahunAjaran);
         }]);
 
         if ($user->role === 'guru') {
-            // Guru only sees their classes
             $kelasIds = Kelas::where('guru_id', $user->id)->pluck('id');
             $query->whereIn('kelas_id', $kelasIds);
         }
 
-        // Sort alphabetically
-        $query->orderBy('nama_lengkap', 'asc');
-
-        $siswas = $query->get();
-
-        // Transform data for frontend table
-        $months = ['Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des', 'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun'];
-        // Current academic year setup: July to June. We'll map the months to the payment array.
-
-        // Set bulan lunas per siswa (O(1) per cek, bukan contains() di koleksi)
-        $paidSets = [];
-        foreach ($siswas as $s) {
-            $set = [];
-            foreach ($s->infaks as $infak) {
-                $set[$infak->bulan] = true;
-            }
-            $paidSets[$s->id] = $set;
+        if ($request->filled('kelas_id')) {
+            $query->where('kelas_id', $request->query('kelas_id'));
         }
 
-        $result = $siswas->map(function($siswa) use ($months, $paidSets) {
-            $payments = [];
-            foreach ($months as $m) {
-                // Check if there is an infak for this month on the running academic year
-                $hasPaid = isset($paidSets[$siswa->id][$this->mapBulanIndonesia($m)]);
+        if ($request->filled('search')) {
+            $search = $request->query('search');
+            $query->where('nama_lengkap', 'like', "%{$search}%");
+        }
 
-                $payments[] = $hasPaid;
+        $query->orderBy('nama_lengkap', 'asc');
+
+        $transformCollection = function ($siswas) {
+            $months = ['Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des', 'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun'];
+            $paidSets = [];
+            foreach ($siswas as $s) {
+                $set = [];
+                foreach ($s->infaks as $infak) {
+                    $set[$infak->bulan] = true;
+                }
+                $paidSets[$s->id] = $set;
             }
-            return [
-                'id' => $siswa->id,
-                'name' => $siswa->nama_lengkap, // Pass full name instead of first word
-                'fullName' => $siswa->nama_lengkap,
-                'nis' => $siswa->nis,
-                'blok' => $siswa->blok ?: 'N/A',
-                'waliName' => $siswa->nama_wali_1 ?: 'Wali Siswa',
-                'phone' => $siswa->wa_wali_1 ? '+62 ' . ltrim($siswa->wa_wali_1, '0') : '+62 812-0000-0000',
-                'kelas' => $siswa->kelas ? $siswa->kelas->nama_kelas : '',
-                'payments' => $payments
-            ];
-        });
 
-        return response()->json($result);
+            return $siswas->map(function($siswa) use ($months, $paidSets) {
+                $payments = [];
+                foreach ($months as $m) {
+                    $hasPaid = isset($paidSets[$siswa->id][$this->mapBulanIndonesia($m)]);
+                    $payments[] = $hasPaid;
+                }
+                return [
+                    'id' => $siswa->id,
+                    'name' => $siswa->nama_lengkap,
+                    'fullName' => $siswa->nama_lengkap,
+                    'nis' => $siswa->nis,
+                    'blok' => $siswa->blok ?: 'N/A',
+                    'waliName' => $siswa->nama_wali_1 ?: 'Wali Siswa',
+                    'phone' => $siswa->wa_wali_1 ? '+62 ' . ltrim($siswa->wa_wali_1, '0') : '+62 812-0000-0000',
+                    'kelas' => $siswa->kelas ? $siswa->kelas->nama_kelas : '',
+                    'payments' => $payments
+                ];
+            });
+        };
+
+        if ($perPage > 0) {
+            $paginator = $query->paginate($perPage);
+            $transformed = $transformCollection($paginator->getCollection());
+            $paginator->setCollection($transformed);
+            return response()->json($paginator);
+        }
+
+        return response()->json($transformCollection($query->get()));
     }
 
     public function store(Request $request)

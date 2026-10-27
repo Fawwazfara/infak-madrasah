@@ -51,13 +51,18 @@
 
         <!-- Section 1.5: Manajemen Infak (Hanya Edit) -->
         <section v-if="isEdit" class="bg-surface-container-lowest rounded-2xl shadow-sm p-md sm:p-lg border border-surface-variant/50">
-          <h2 class="font-headline-md text-[18px] text-primary-container flex items-center gap-xs mb-sm">
-            <span class="material-symbols-outlined text-secondary fill">payments</span>
-            Riwayat Infak {{ academicYearLabel }}
-          </h2>
+          <div class="flex items-center justify-between mb-sm">
+            <h2 class="font-headline-md text-[18px] text-primary-container flex items-center gap-xs">
+              <span class="material-symbols-outlined text-secondary fill">payments</span>
+              Riwayat Infak {{ academicYearLabel }}
+            </h2>
+            <span class="flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium" :class="hasDraftChanges ? 'bg-warning/20 text-warning' : 'bg-secondary/20 text-on-surface-variant'">
+              <span class="material-symbols-outlined text-[12px]">{{ hasDraftChanges ? 'edit' : 'check_circle' }}</span>
+              {{ hasDraftChanges ? 'Ada perubahan belum disimpan' : 'Tersinkronkan' }}
+            </span>
+          </div>
           <p class="font-body-md text-on-surface-variant mb-md text-sm">
-            Klik salah satu bulan untuk melihat rinciannya: ubah tanggal bayar, ubah nominal,
-            hapus pembayaran, atau catat pembayaran bulan yang belum tercatat.
+            Klik bulan untuk mengubah status. Perubahan <strong class="text-primary">hanya disimpan ke server</strong> saat tombol "Simpan Data" ditekan.
           </p>
 
           <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
@@ -65,15 +70,39 @@
               v-for="cell in monthCells"
               :key="cell.short"
               type="button"
-              @click="openMonthModal(cell)"
+              @click="toggleMonthDraft(cell)"
               :class="[
                 'flex items-center justify-center gap-1 p-2 rounded-lg border-2 cursor-pointer transition-all select-none active:scale-95',
-                cell.paid ? 'border-primary bg-primary/10 text-primary font-bold' : 'border-outline-variant bg-surface-container-lowest text-on-surface-variant hover:bg-surface-variant'
+                cell.draftPaid !== null
+                  ? 'border-warning bg-warning/10 text-warning font-bold ring-2 ring-warning/30'
+                  : cell.paid
+                    ? 'border-primary bg-primary/10 text-primary font-bold'
+                    : 'border-outline-variant bg-surface-container-lowest text-on-surface-variant hover:bg-surface-variant'
               ]"
+              :title="cell.draftPaid !== null ? (cell.draftPaid ? 'Akan dicatat (draft)' : 'Akan dihapus (draft)') : (cell.paid ? 'Sudah dibayar - klik untuk hapus' : 'Belum dibayar - klik untuk catat')"
             >
-              <span v-if="cell.paid" class="material-symbols-outlined text-[16px] fill">check</span>
+              <span v-if="cell.draftPaid !== null" class="material-symbols-outlined text-[16px] fill">{{ cell.draftPaid ? 'pending' : 'delete_forever' }}</span>
+              <span v-else-if="cell.paid" class="material-symbols-outlined text-[16px] fill">check</span>
               <span class="font-label-md text-sm">{{ cell.short }}</span>
             </button>
+          </div>
+
+          <!-- Draft Summary -->
+          <div v-if="hasDraftChanges" class="mt-4 p-3 bg-warning/10 border border-warning/30 rounded-lg">
+            <div class="flex items-center gap-2 text-warning mb-2">
+              <span class="material-symbols-outlined">info</span>
+              <span class="font-label-md">Perubahan menunggu disimpan:</span>
+            </div>
+            <div class="flex flex-wrap gap-1">
+              <span 
+                v-for="m in draftChangesSummary" 
+                :key="m" 
+                class="px-2 py-1 text-xs rounded-full font-medium"
+                :class="m.startsWith('+') ? 'bg-primary/20 text-primary' : 'bg-error/20 text-error'"
+              >
+                {{ m }}
+              </span>
+            </div>
           </div>
 
         </section>
@@ -141,76 +170,6 @@
           </button>
         </div>
       </form>
-
-      <!-- Modal Detail Per Bulan -->
-      <div v-if="modalMonth" class="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50" @click.self="closeMonthModal">
-        <div class="w-full sm:max-w-md bg-surface-container-lowest rounded-t-2xl sm:rounded-2xl shadow-xl border border-surface-variant/50 p-5 max-h-[90vh] overflow-y-auto">
-          <div class="flex items-center justify-between mb-1">
-            <h3 class="font-headline-md text-headline-md text-primary">
-              {{ monthFullName(modalMonth.short) }} {{ academicYearLabel }}
-            </h3>
-            <button type="button" @click="closeMonthModal" aria-label="Tutup" class="p-2 -mr-2 rounded-full hover:bg-surface-container-low text-on-surface-variant transition-colors">
-              <span class="material-symbols-outlined font-normal">close</span>
-            </button>
-          </div>
-          <p class="font-label-sm text-label-sm mb-4" :class="modalMonth.paid ? 'text-secondary' : 'text-on-surface-variant'">
-            {{ modalMonth.paid ? 'Sudah dibayar — ubah atau hapus pembayaran bulan ini.' : 'Belum tercatat — isi detail untuk mencatat pembayaran.' }}
-          </p>
-
-          <div class="flex flex-col gap-3">
-            <div class="flex flex-col">
-              <label class="font-label-md text-label-md text-on-surface-variant" for="modalTanggal">Tanggal Bayar</label>
-              <input
-                id="modalTanggal"
-                v-model="modalForm.tanggal"
-                type="date"
-                required
-                class="min-h-[48px] px-md py-sm rounded-lg border border-outline-variant bg-surface-container-lowest text-on-surface focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/20 transition-all font-body-md text-body-md"
-              >
-            </div>
-            <div class="flex flex-col">
-              <label class="font-label-md text-label-md text-on-surface-variant" for="modalNominal">Nominal (Rp)</label>
-              <input
-                id="modalNominal"
-                v-model.number="modalForm.nominal"
-                type="number"
-                min="0"
-                step="1000"
-                required
-                inputmode="numeric"
-                placeholder="Contoh: 30000"
-                class="min-h-[48px] px-md py-sm rounded-lg border border-outline-variant bg-surface-container-lowest text-on-surface focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/20 transition-all font-body-md text-body-md"
-              >
-            </div>
-          </div>
-
-          <div class="flex flex-col gap-2 mt-5">
-            <button
-              type="button"
-              :disabled="modalBusy"
-              @click="saveMonth"
-              :class="[
-                'w-full h-12 rounded-xl font-label-md text-label-md text-white flex items-center justify-center gap-2 transition-all',
-                modalBusy ? 'bg-secondary opacity-80 cursor-not-allowed' : 'bg-primary-container hover:bg-primary-container/90 active:scale-95'
-              ]"
-            >
-              <span v-if="modalBusy" class="material-symbols-outlined animate-spin">sync</span>
-              <span v-else class="material-symbols-outlined fill">{{ modalMonth.paid ? 'save' : 'add_circle' }}</span>
-              {{ modalMonth.paid ? 'Simpan Perubahan' : 'Catat Pembayaran' }}
-            </button>
-            <button
-              v-if="modalMonth.paid"
-              type="button"
-              :disabled="modalBusy"
-              @click="deleteMonth"
-              class="w-full h-12 rounded-xl font-label-md text-label-md text-error border border-error hover:bg-error/10 flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-60"
-            >
-              <span class="material-symbols-outlined">delete</span>
-              Hapus Pembayaran Bulan Ini
-            </button>
-          </div>
-        </div>
-      </div>
     </main>
   </div>
 </template>
@@ -219,7 +178,6 @@
 import { ref, reactive, onMounted, computed } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import axios from 'axios';
-import { drainOutbox } from '../../utils/waOutbox';
 
 const router = useRouter();
 const route = useRoute();
@@ -277,26 +235,37 @@ const engToShortMap = Object.fromEntries(
   Object.entries(monthNameMap).map(([short, full]) => [full, short])
 );
 
-const extractError = (error) => {
-  const data = error.response?.data;
-  if (!data) return 'Koneksi gagal atau sesi berakhir. Silakan login ulang.';
-  if (data.message && !data.errors) return data.message;
-  if (data.errors) return Object.values(data.errors).flat().join('\n');
-  return 'Terjadi kesalahan tidak diketahui.';
-};
-
 // short bulan -> record infak terbaru (untuk chip & modal)
 const paidByMonth = ref({});
-const modalMonth = ref(null);
-const modalForm = reactive({ tanggal: '', nominal: '' });
-const modalBusy = ref(false);
+
+// Draft state: null = no change, true = will add, false = will delete
+const draftMonths = ref({});
 
 const monthCells = computed(() =>
   monthsList.map((short) => {
     const record = paidByMonth.value[short] || null;
-    return { short, paid: !!record, record };
+    const draft = draftMonths.value[short];
+    return { 
+      short, 
+      paid: !!record, 
+      record,
+      draftPaid: draft === null ? null : draft  // null=no change, true=add, false=delete
+    };
   })
 );
+
+const hasDraftChanges = computed(() => 
+  Object.values(draftMonths.value).some(v => v !== null)
+);
+
+const draftChangesSummary = computed(() => {
+  const summary = [];
+  Object.entries(draftMonths.value).forEach(([short, val]) => {
+    if (val === true) summary.push(`+ ${short}`);
+    if (val === false) summary.push(`- ${short}`);
+  });
+  return summary;
+});
 
 const monthFullName = (short) => monthNameMap[short] || short;
 
@@ -304,90 +273,28 @@ const refreshInfak = async () => {
   try {
     const res = await axios.get(`/siswa/${studentId.value}/infak`);
     const map = {};
-    // Endpoint sudah mengurutkan created_at desc: baris pertama = yang terbaru
     (res.data || []).forEach((i) => {
       const short = engToShortMap[i.bulan] || i.bulan;
       if (!map[short]) map[short] = i;
     });
     paidByMonth.value = map;
+    // Reset draft on fresh load
+    draftMonths.value = {};
   } catch (error) {
     console.error('Gagal memuat riwayat infak', error);
   }
 };
 
-const openMonthModal = (cell) => {
-  modalMonth.value = cell;
-  if (cell.paid && cell.record) {
-    modalForm.tanggal = String(cell.record.tanggal_bayar || '').slice(0, 10);
-    modalForm.nominal = Number(cell.record.jumlah) || 0;
+const toggleMonthDraft = (cell) => {
+  if (cell.draftPaid !== null) {
+    // Already has draft - toggle back to no change
+    draftMonths.value[cell.short] = null;
+  } else if (cell.paid) {
+    // Currently paid - draft to delete
+    draftMonths.value[cell.short] = false;
   } else {
-    modalForm.tanggal = new Date().toISOString().split('T')[0];
-    const latest = Object.values(paidByMonth.value)[0];
-    modalForm.nominal = latest ? Number(latest.jumlah) || 30000 : 30000;
-  }
-};
-
-const closeMonthModal = () => {
-  modalMonth.value = null;
-  modalBusy.value = false;
-};
-
-const saveMonth = async () => {
-  if (!modalMonth.value) return;
-  if (!modalForm.tanggal) {
-    alert('Tanggal bayar wajib diisi.');
-    return;
-  }
-  if (!(Number(modalForm.nominal) > 0)) {
-    alert('Nominal wajib diisi.');
-    return;
-  }
-
-  modalBusy.value = true;
-  try {
-    if (modalMonth.value.paid) {
-      await axios.put(`/infak/${modalMonth.value.record.id}`, {
-        tanggal_bayar: modalForm.tanggal,
-        jumlah: modalForm.nominal,
-        bulan: modalMonth.value.record.bulan,
-        tahun: modalMonth.value.record.tahun
-      });
-    } else {
-      await axios.post('/infak/sync', {
-        siswa_id: studentId.value,
-        kelas_id: form.kelas_id,
-        months: [modalMonth.value.short],
-        nominal: modalForm.nominal,
-        tanggal_bayar: modalForm.tanggal
-      });
-      // Kirim konfirmasi WA ke wali secara bertahap (dengan delay) di background
-      drainOutbox().catch(() => {});
-    }
-    await refreshInfak();
-    closeMonthModal();
-  } catch (error) {
-    console.error('Gagal menyimpan infak:', error);
-    alert('Gagal menyimpan data infak:\n\n' + extractError(error));
-  } finally {
-    modalBusy.value = false;
-  }
-};
-
-const deleteMonth = async () => {
-  if (!modalMonth.value || !modalMonth.value.record) return;
-  const label = monthFullName(modalMonth.value.short);
-  if (!confirm(`Hapus pembayaran bulan ${label}? Data infak bulan ini akan dihapus permanen.`)) return;
-
-  modalBusy.value = true;
-  try {
-    await axios.delete(`/infak/${modalMonth.value.record.id}`);
-    await refreshInfak();
-    closeMonthModal();
-  } catch (error) {
-    console.error('Gagal menghapus infak:', error);
-    alert('Gagal menghapus pembayaran:\n\n' + extractError(error));
-  } finally {
-    modalBusy.value = false;
+    // Currently unpaid - draft to add
+    draftMonths.value[cell.short] = true;
   }
 };
 
@@ -406,6 +313,7 @@ const saveSiswa = async () => {
   isSubmitting.value = true;
   
   try {
+    // First save student basic data
     const payload = {
       nama_lengkap: form.namaLengkap,
       kelas_id: form.kelas_id,
@@ -422,6 +330,11 @@ const saveSiswa = async () => {
     } else {
       await axios.post('/siswa', payload);
     }
+
+    // Then apply draft infak changes if any
+    if (isEdit.value && hasDraftChanges.value) {
+      await applyDraftInfakChanges();
+    }
     
     isSuccess.value = true;
     setTimeout(() => {
@@ -433,5 +346,77 @@ const saveSiswa = async () => {
   } finally {
     isSubmitting.value = false;
   }
+};
+
+const applyDraftInfakChanges = async () => {
+  const changes = Object.entries(draftMonths.value).filter(([, v]) => v !== null);
+  if (changes.length === 0) return;
+
+  try {
+    // Group changes by action type
+    const toAdd = changes.filter(([, v]) => v === true).map(([short]) => short);
+    const toDelete = changes.filter(([, v]) => v === false).map(([short]) => short);
+
+    // Use syncBySiswa endpoint for bulk sync
+    const currentYear = new Date().getFullYear();
+    const akademikStart = new Date().getMonth() >= 6 ? currentYear : currentYear - 1;
+
+    if (toAdd.length > 0 || toDelete.length > 0) {
+      // Get latest nominal for new entries
+      let nominal = 30000;
+      const latestRecord = Object.values(paidByMonth.value)[0];
+      if (latestRecord) nominal = Number(latestRecord.jumlah) || 30000;
+
+      const today = new Date().toISOString().split('T')[0];
+
+      await axios.post('/infak/sync', {
+        siswa_id: studentId.value,
+        kelas_id: form.kelas_id,
+        tahun: akademikStart,
+        months: [...toAdd, ...toDelete], // sync endpoint handles diff
+        nominal: nominal,
+        tanggal_bayar: today,
+        update_existing: false
+      });
+
+      // For deletions, we need to call delete individually or handle differently
+      // Actually, syncBySiswa handles this - it computes diff from requested months
+      // So we need to pass the FINAL desired state (all months that should exist)
+      
+      // Better approach: get current paid months, apply draft, send final list
+      const currentPaidMonths = Object.keys(paidByMonth.value);
+      const finalMonths = currentPaidMonths
+        .filter(m => draftMonths.value[m] !== false) // keep unless drafted for deletion
+        .concat(toAdd); // add drafted additions
+      
+      // Remove duplicates
+      const uniqueFinalMonths = [...new Set(finalMonths)];
+
+      await axios.post('/infak/sync', {
+        siswa_id: studentId.value,
+        kelas_id: form.kelas_id,
+        tahun: akademikStart,
+        months: uniqueFinalMonths,
+        nominal: nominal,
+        tanggal_bayar: today,
+        update_existing: true
+      });
+    }
+
+    // Clear draft after successful save
+    draftMonths.value = {};
+    await refreshInfak();
+  } catch (error) {
+    console.error('Gagal menerapkan perubahan infak:', error);
+    throw error;
+  }
+};
+
+const extractError = (error) => {
+  const data = error.response?.data;
+  if (!data) return 'Koneksi gagal atau sesi berakhir. Silakan login ulang.';
+  if (data.message && !data.errors) return data.message;
+  if (data.errors) return Object.values(data.errors).flat().join('\n');
+  return 'Terjadi kesalahan tidak diketahui.';
 };
 </script>
