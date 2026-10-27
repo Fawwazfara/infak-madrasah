@@ -18,6 +18,7 @@
         <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-[20px]">search</span>
         <input 
           v-model="searchQuery"
+          @keyup.enter="fetchLogs"
           type="text" 
           placeholder="Cari transaksi atau aktivitas..." 
           class="w-full h-12 pl-10 pr-4 bg-surface-container-lowest rounded-xl border border-outline-variant/50 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 text-body-md transition-shadow shadow-sm"
@@ -31,7 +32,7 @@
 
         <!-- Groups -->
         <div class="flex flex-col gap-6">
-          <div v-for="group in filteredGroups" :key="group.dateLabel" class="relative z-10 flex flex-col gap-4">
+          <div v-for="group in groupedLogs" :key="group.dateLabel" class="relative z-10 flex flex-col gap-4">
             
             <!-- Date Label -->
             <div class="pl-12">
@@ -78,16 +79,39 @@
             </div>
           </div>
           
-          <!-- Empty State if no search results -->
-          <div v-if="filteredGroups.length === 0" class="pl-12 text-center py-8">
+          <!-- Empty State -->
+          <div v-if="!isLoading && groupedLogs.length === 0" class="pl-12 text-center py-8">
             <span class="material-symbols-outlined text-[48px] text-outline-variant mb-2">search_off</span>
-            <p class="font-label-md text-on-surface-variant">Tidak ada riwayat yang cocok dengan "{{ searchQuery }}".</p>
+            <p class="font-label-md text-on-surface-variant">
+              {{ searchQuery ? `Tidak ada riwayat yang cocok dengan "${searchQuery}".` : 'Belum ada riwayat aktivitas.' }}
+            </p>
           </div>
-        </div>
 
-        <!-- Loading / End Indicator -->
-        <div v-if="filteredGroups.length > 0" class="flex justify-center mt-8 pl-12">
-          <span class="material-symbols-outlined text-outline-variant animate-spin">refresh</span>
+          <!-- Skeleton Loading State -->
+          <div v-if="isLoading" class="pl-12 flex flex-col gap-4">
+            <div v-for="i in 3" :key="i" class="relative flex items-start pl-12">
+              <div class="absolute left-0 w-10 h-10 rounded-full bg-surface-container-high animate-pulse border-4 border-surface-dim"></div>
+              <div class="w-full bg-surface-container-lowest rounded-2xl shadow-sm border border-outline-variant/30 p-4">
+                <div class="h-5 w-48 bg-surface-container-high animate-pulse rounded mb-3"></div>
+                <div class="h-4 w-full bg-surface-container-high animate-pulse rounded"></div>
+                <div class="h-4 w-3/4 bg-surface-container-high animate-pulse rounded mt-2"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Load More Button (Server-side Pagination) -->
+          <div v-if="!isLoading && hasMorePages" class="flex justify-center mt-8 pl-12">
+            <button 
+              @click="loadMore"
+              :disabled="isLoadingMore"
+              class="px-6 py-2 border border-outline-variant rounded-xl text-on-surface-variant hover:bg-surface-container-low transition-colors"
+            >
+              <span v-if="isLoadingMore" class="material-symbols-outlined animate-spin text-[20px]">sync</span>
+              <span v-else class="material-symbols-outlined text-[20px]">keyboard_arrow_down</span>
+              {{ isLoadingMore ? 'Memuat...' : 'Muat Lebih Banyak' }}
+            </button>
+          </div>
+
         </div>
 
       </div>
@@ -97,68 +121,102 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue';
-
+import { ref, computed, watch } from 'vue';
 import axios from 'axios';
 import { onMounted } from 'vue';
 
 const searchQuery = ref('');
+const isLoading = ref(false);
+const isLoadingMore = ref(false);
+const allLogs = ref([]);
+const currentPage = ref(1);
+const hasMorePages = ref(true);
 
-const rawHistory = ref([]);
-
-onMounted(async () => {
+const fetchLogs = async (page = 1, append = false) => {
+  if (append) {
+    isLoadingMore.value = true;
+  } else {
+    isLoading.value = true;
+  }
+  
   try {
-    const res = await axios.get('/log-aktivitas');
+    const params = {
+      per_page: 30,
+      page: page
+    };
     
-    // Group logs by Date string
-    const groups = {};
-    res.data.forEach(log => {
-      const date = new Date(log.created_at);
-      const dateStr = date.toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-      
-      const timeStr = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
-
-      if (!groups[dateStr]) {
-        groups[dateStr] = {
-          dateLabel: dateStr,
-          items: []
-        };
-      }
-      
-      groups[dateStr].items.push({
-        id: log.id,
-        type: log.type,
-        title: log.title,
-        description: log.description,
-        time: timeStr,
-        amount: log.amount
-      });
-    });
+    if (searchQuery.value.trim()) {
+      params.search = searchQuery.value.trim();
+    }
     
-    rawHistory.value = Object.values(groups);
+    const res = await axios.get('/log-aktivitas', { params });
+    const newLogs = res.data.data || res.data; // Handle both paginated and non-paginated responses
+    
+    if (append) {
+      allLogs.value = [...allLogs.value, ...newLogs];
+    } else {
+      allLogs.value = newLogs;
+    }
+    
+    // Check if there are more pages (for paginated response)
+    hasMorePages.value = res.data.current_page < res.data.last_page;
+    currentPage.value = page;
   } catch (error) {
     console.error("Gagal mengambil riwayat", error);
+    hasMorePages.value = false;
+  } finally {
+    isLoading.value = false;
+    isLoadingMore.value = false;
   }
+};
+
+const loadMore = () => {
+  if (!isLoadingMore.value && hasMorePages.value) {
+    fetchLogs(currentPage.value + 1, true);
+  }
+};
+
+// Re-fetch when search query changes (with debounce)
+let searchTimeout = null;
+watch(searchQuery, (newVal) => {
+  clearTimeout(searchTimeout);
+  searchTimeout = setTimeout(() => {
+    fetchLogs(1, false);
+  }, 300);
 });
 
-const filteredGroups = computed(() => {
-  if (!searchQuery.value.trim()) return rawHistory.value;
+onMounted(() => {
+  fetchLogs(1, false);
+});
 
-  const query = searchQuery.value.toLowerCase();
+const groupedLogs = computed(() => {
+  if (!allLogs.value.length) return [];
   
-  return rawHistory.value.map(group => {
-    // Filter items inside the group
-    const filteredItems = group.items.filter(item => 
-      item.title.toLowerCase().includes(query) || 
-      item.description.toLowerCase().includes(query)
-    );
+  const groups = {};
+  allLogs.value.forEach(log => {
+    const date = new Date(log.created_at);
+    const dateStr = date.toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
     
-    // Return a new group object with filtered items
-    return {
-      ...group,
-      items: filteredItems
-    };
-  }).filter(group => group.items.length > 0); // Remove empty groups
+    const timeStr = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+
+    if (!groups[dateStr]) {
+      groups[dateStr] = {
+        dateLabel: dateStr,
+        items: []
+      };
+    }
+    
+    groups[dateStr].items.push({
+      id: log.id,
+      type: log.type,
+      title: log.title,
+      description: log.description,
+      time: timeStr,
+      amount: log.amount
+    });
+  });
+  
+  return Object.values(groups);
 });
 
 const getIconName = (type) => {
@@ -187,7 +245,7 @@ const clearLog = async () => {
   if (confirm("PERINGATAN: Apakah Anda yakin ingin menghapus semua data log aktivitas? Tindakan ini tidak dapat dibatalkan dan akan dicatat dalam audit sistem.")) {
     try {
       await axios.post('/log-aktivitas/clear');
-      rawHistory.value = [];
+      allLogs.value = [];
       alert("Log aktivitas telah berhasil dikosongkan.");
     } catch (error) {
       console.error("Gagal menghapus log", error);

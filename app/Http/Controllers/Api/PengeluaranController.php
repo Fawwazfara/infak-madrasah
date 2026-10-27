@@ -9,9 +9,28 @@ use Illuminate\Http\Request;
 
 class PengeluaranController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        return response()->json(Pengeluaran::orderBy('tanggal', 'desc')->get());
+        $perPage = (int) $request->query('per_page', 0);
+        $query = Pengeluaran::orderBy('tanggal', 'desc');
+
+        if ($request->filled('bulan') && $request->query('bulan') !== 'Semua') {
+            $bulan = $request->query('bulan');
+            $bulanIndoKeAngka = [
+                'Januari' => '01', 'Februari' => '02', 'Maret' => '03', 'April' => '04',
+                'Mei' => '05', 'Juni' => '06', 'Juli' => '07', 'Agustus' => '08',
+                'September' => '09', 'Oktober' => '10', 'November' => '11', 'Desember' => '12'
+            ];
+            if (isset($bulanIndoKeAngka[$bulan])) {
+                $query->whereMonth('tanggal', $bulanIndoKeAngka[$bulan]);
+            }
+        }
+
+        if ($perPage > 0) {
+            return response()->json($query->paginate($perPage));
+        }
+
+        return response()->json($query->get());
     }
 
     public function store(Request $request)

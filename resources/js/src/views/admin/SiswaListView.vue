@@ -28,7 +28,7 @@
           </button>
 
           <button 
-            v-if="selectedClass"
+            v-if="currentClassObj"
             @click="cetakFormSetoran"
             class="flex-1 md:flex-none bg-primary-container text-on-primary-container px-4 py-2 rounded-xl font-label-md text-label-md flex items-center justify-center gap-2 hover:bg-primary-container/90 transition-colors active:scale-95 shadow-sm whitespace-nowrap"
           >
@@ -47,16 +47,46 @@
           </button>
         </div>
         
-        <div class="relative w-full md:w-64">
-          <label class="sr-only" for="class-select">Pilih Kelas</label>
-          <div class="relative">
-            <select v-model="selectedClass" class="block w-full appearance-none bg-surface-container-low border border-outline-variant text-on-surface py-3 pl-4 pr-10 rounded-xl font-label-md text-label-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition-colors" id="class-select">
-              <option value="">Semua Kelas</option>
-              <option v-for="c in classes" :key="c.id" :value="c.nama_kelas">{{ c.nama_kelas }}</option>
-            </select>
-            <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-on-surface-variant">
-              <span class="material-symbols-outlined text-[20px]">arrow_drop_down</span>
+        <!-- Kelas Navigation: Buttons instead of dropdown -->
+        <div class="w-full md:w-auto mt-4 md:mt-0">
+          <div class="flex items-center justify-center md:justify-start gap-3">
+            <!-- Prev Button -->
+            <button 
+              @click="navigateClass(-1)"
+              :disabled="!hasPrevClass"
+              class="flex items-center justify-center w-12 h-12 rounded-xl border border-outline-variant bg-surface-container-low text-on-surface hover:bg-surface-variant disabled:opacity-40 disabled:cursor-not-allowed transition-colors active:scale-95"
+              aria-label="Kelas sebelumnya"
+            >
+              <span class="material-symbols-outlined text-[24px]">chevron_left</span>
+            </button>
+
+            <!-- Current Class Display -->
+            <div class="flex-1 md:flex-none min-w-[200px] max-w-[300px]">
+              <div class="bg-surface-container-low rounded-xl border border-outline-variant/50 px-4 py-3 flex items-center justify-center md:justify-start gap-3">
+                <span class="material-symbols-outlined text-primary text-[24px]">class</span>
+                <div class="text-left min-w-0">
+                  <p class="font-label-sm text-on-surface-variant uppercase tracking-wider">Kelas Saat Ini</p>
+                  <p class="font-headline-md text-headline-md text-primary truncate">{{ currentClassName }}</p>
+                </div>
+              </div>
             </div>
+
+            <!-- Next Button -->
+            <button 
+              @click="navigateClass(1)"
+              :disabled="!hasNextClass"
+              class="flex items-center justify-center w-12 h-12 rounded-xl border border-outline-variant bg-surface-container-low text-on-surface hover:bg-surface-variant disabled:opacity-40 disabled:cursor-not-allowed transition-colors active:scale-95"
+              aria-label="Kelas selanjutnya"
+            >
+              <span class="material-symbols-outlined text-[24px]">chevron_right</span>
+            </button>
+
+            <!-- Keyboard hint -->
+            <span class="hidden md:inline-flex items-center gap-1 px-3 py-1 text-xs text-on-surface-variant bg-surface-container-low rounded-full">
+              <kbd class="px-1.5 py-0.5 bg-surface-variant rounded text-on-surface font-mono">←</kbd>
+              <kbd class="px-1.5 py-0.5 bg-surface-variant rounded text-on-surface font-mono">→</kbd>
+              navigasi
+            </span>
           </div>
         </div>
       </div>
@@ -74,12 +104,21 @@
             </tr>
           </thead>
           <tbody class="divide-y divide-outline-variant">
-            <!-- Iterate Students -->
-            <tr v-if="isLoading" class="border-none">
-              <td colspan="14" class="p-lg text-center font-body-md text-on-surface-variant">Memuat data siswa...</td>
+            <!-- Skeleton Loading Rows -->
+            <tr v-if="isLoading" v-for="i in 5" :key="i" class="border-none">
+              <td class="bg-surface-container-lowest px-2 py-4 border-r border-outline-variant text-center w-[40px]">
+                <div class="h-4 w-8 bg-surface-container-high animate-pulse rounded"></div>
+              </td>
+              <td class="sticky left-0 z-20 bg-surface-container-lowest p-md border-r border-outline-variant w-[120px] max-w-[120px] md:w-[200px] md:max-w-[200px]">
+                <div class="h-5 w-40 bg-surface-container-high animate-pulse rounded"></div>
+              </td>
+              <td class="p-sm text-center" v-for="m in months" :key="m">
+                <div class="h-5 w-5 mx-auto bg-surface-container-high animate-pulse rounded-full"></div>
+              </td>
             </tr>
+
             <tr v-if="!isLoading && filteredStudents.length === 0" class="border-none">
-              <td colspan="14" class="p-lg text-center font-body-md text-on-surface-variant">Belum ada data siswa.</td>
+              <td colspan="14" class="p-lg text-center font-body-md text-on-surface-variant">Belum ada data siswa di kelas ini.</td>
             </tr>
             <tr 
               v-for="(student, index) in filteredStudents" 
@@ -176,32 +215,58 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch, nextTick } from 'vue';
 import axios from 'axios';
 import { drainOutbox } from '../../utils/waOutbox';
 
 const months = ['Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des', 'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun'];
 
+// Urutan kelas tetap (sesuai DashboardController)
+const kelasOrder = [
+  'TK', 'Kelas 1', 'Kelas 2', 'Kelas 3', 'Kelas 4A', 'Kelas 4B',
+  'Kelas 5', 'Kelas 6', 'Kelas 7', 'Kelas 8', 'Kelas 9', 'Kelas Ulya', 'Bambim'
+];
+
 const students = ref([]);
 const classes = ref([]);
 const isLoading = ref(true);
-const selectedClass = ref('');
 const isBlasting = ref(false);
 const blastProgress = ref(null);
 const blastDelay = ref(60);
+const modalStudent = ref(null);
+const studentToDelete = ref(null);
+
+// Current class index in kelasOrder
+const currentClassIndex = ref(0);
 
 const fetchClasses = async () => {
   try {
     const res = await axios.get('/kelas');
     classes.value = res.data;
+    
+    // Sort classes according to kelasOrder
+    classes.value.sort((a, b) => {
+      const idxA = kelasOrder.indexOf(a.nama_kelas);
+      const idxB = kelasOrder.indexOf(b.nama_kelas);
+      return (idxA === -1 ? 99 : idxA) - (idxB === -1 ? 99 : idxB);
+    });
+    
+    // Find TK index and set as default
+    const tkIndex = classes.value.findIndex(c => c.nama_kelas === 'TK');
+    if (tkIndex !== -1) {
+      currentClassIndex.value = tkIndex;
+    }
   } catch (e) {
     console.error("Gagal mengambil kelas", e);
   }
 };
 
 const fetchStudents = async () => {
+  isLoading.value = true;
   try {
-    const response = await axios.get('/siswa');
+    // Pass kelas_id if currentClassObj is ready for server-side filtering
+    const params = currentClassObj.value ? { kelas_id: currentClassObj.value.id } : {};
+    const response = await axios.get('/siswa', { params });
     students.value = response.data;
   } catch (error) {
     console.error("Failed to fetch students:", error);
@@ -210,9 +275,49 @@ const fetchStudents = async () => {
   }
 };
 
+watch(currentClassIndex, () => {
+  fetchStudents();
+});
+
 onMounted(() => {
   fetchClasses();
   fetchStudents();
+  
+  // Keyboard navigation
+  window.addEventListener('keydown', handleKeydown);
+});
+
+const handleKeydown = (e) => {
+  // Only navigate if not typing in input
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
+  
+  if (e.key === 'ArrowLeft') {
+    e.preventDefault();
+    navigateClass(-1);
+  } else if (e.key === 'ArrowRight') {
+    e.preventDefault();
+    navigateClass(1);
+  }
+};
+
+const currentClassObj = computed(() => classes.value[currentClassIndex.value] || null);
+
+const currentClassName = computed(() => currentClassObj.value?.nama_kelas || 'Belum ada kelas');
+
+const hasPrevClass = computed(() => currentClassIndex.value > 0);
+
+const hasNextClass = computed(() => currentClassIndex.value < classes.value.length - 1);
+
+const navigateClass = (direction) => {
+  const newIndex = currentClassIndex.value + direction;
+  if (newIndex >= 0 && newIndex < classes.value.length) {
+    currentClassIndex.value = newIndex;
+  }
+};
+
+const filteredStudents = computed(() => {
+  if (!currentClassObj.value) return [];
+  return students.value.filter(s => s.kelas === currentClassObj.value.nama_kelas);
 });
 
 const exportSiswa = async () => {
@@ -232,11 +337,8 @@ const exportSiswa = async () => {
 };
 
 const cetakFormSetoran = () => {
-  if (!selectedClass.value) return;
-  const kelasObj = classes.value.find(c => c.nama_kelas === selectedClass.value);
-  if (kelasObj) {
-    window.open(`/api/kelas/${kelasObj.id}/form-setoran`, '_blank');
-  }
+  if (!currentClassObj.value) return;
+  window.open(`/api/kelas/${currentClassObj.value.id}/form-setoran`, '_blank');
 };
 
 const blastWA = async () => {
@@ -277,13 +379,6 @@ const blastWA = async () => {
   }
 };
 
-const filteredStudents = computed(() => {
-  if (!selectedClass.value) return students.value;
-  return students.value.filter(s => s.kelas === selectedClass.value);
-});
-
-const modalStudent = ref(null);
-
 const openModal = (student) => {
   modalStudent.value = student;
 };
@@ -292,11 +387,9 @@ const closeModal = () => {
   modalStudent.value = null;
 };
 
-const studentToDelete = ref(null);
-
 const confirmDelete = (student) => {
   studentToDelete.value = student;
-  closeModal(); // close the info modal
+  closeModal();
 };
 
 const cancelDelete = () => {
@@ -316,6 +409,12 @@ const executeDelete = async () => {
     }
   }
 };
+
+// Cleanup keyboard listener
+import { onUnmounted } from 'vue';
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleKeydown);
+});
 </script>
 
 <style scoped>
