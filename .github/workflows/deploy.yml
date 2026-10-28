@@ -41,6 +41,7 @@ jobs:
           SOURCE: "."
           REMOTE_HOST: ${{ secrets.SSH_HOST }}
           REMOTE_USER: ${{ secrets.SSH_USER }}
+          REMOTE_PORT: ${{ secrets.SSH_PORT || 22 }}
           TARGET: ${{ secrets.SSH_TARGET_DIR }}
           EXCLUDE: "/.git/, /.github/, /node_modules/, /tests/, /.env, /storage/logs/*, /storage/framework/sessions/*, /storage/framework/cache/data/*"
 

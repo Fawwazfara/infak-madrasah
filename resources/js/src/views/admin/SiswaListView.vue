@@ -5,7 +5,7 @@
       <div class="flex flex-col md:flex-row md:items-center justify-between gap-md mb-md">
         <h2 class="font-headline-lg-mobile md:font-headline-lg text-headline-lg-mobile md:text-headline-lg text-on-background">Monitoring Pembayaran</h2>
         
-        <div class="flex flex-wrap gap-sm w-full md:w-auto">
+        <div class="flex flex-wrap gap-3 w-full md:w-auto">
           <router-link 
             to="/admin/siswa/create" 
             class="flex-1 md:flex-none bg-primary text-white px-4 py-2 rounded-xl font-label-md text-label-md flex items-center justify-center gap-2 hover:bg-primary/90 transition-colors active:scale-95 whitespace-nowrap"
@@ -80,13 +80,6 @@
             >
               <span class="material-symbols-outlined text-[24px]">chevron_right</span>
             </button>
-
-            <!-- Keyboard hint -->
-            <span class="hidden md:inline-flex items-center gap-1 px-3 py-1 text-xs text-on-surface-variant bg-surface-container-low rounded-full">
-              <kbd class="px-1.5 py-0.5 bg-surface-variant rounded text-on-surface font-mono">←</kbd>
-              <kbd class="px-1.5 py-0.5 bg-surface-variant rounded text-on-surface font-mono">→</kbd>
-              navigasi
-            </span>
           </div>
         </div>
       </div>
