@@ -6,7 +6,7 @@
 # Konfigurasi Server cPanel Anda
 REMOTE_USER="u1zh8984"
 REMOTE_HOST="assajjad.web.id"
-TARGET_DIR="/home/u1zh8984/public_html" # Sesuaikan jika path folder public_html berbeda
+TARGET_DIR="/home/u1zh8984/public_html/assajjad.web.id" # Path folder domain di cPanel
 
 echo "🚀 [1/4] Membangun asset frontend (Vite production)..."
 npm run build || { echo "❌ Build frontend gagal!"; exit 1; }
