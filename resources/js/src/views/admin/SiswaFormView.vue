@@ -70,7 +70,7 @@
               v-for="cell in monthCells"
               :key="cell.short"
               type="button"
-              @click="toggleMonthDraft(cell)"
+              @click="openMonthModal(cell)"
               :class="[
                 'flex items-center justify-center gap-1 p-2 rounded-lg border-2 cursor-pointer transition-all select-none active:scale-95',
                 cell.draftPaid !== null
@@ -79,7 +79,7 @@
                     ? 'border-primary bg-primary/10 text-primary font-bold'
                     : 'border-outline-variant bg-surface-container-lowest text-on-surface-variant hover:bg-surface-variant'
               ]"
-              :title="cell.draftPaid !== null ? (cell.draftPaid ? 'Akan dicatat (draft)' : 'Akan dihapus (draft)') : (cell.paid ? 'Sudah dibayar - klik untuk hapus' : 'Belum dibayar - klik untuk catat')"
+              :title="cell.draftPaid !== null ? (cell.draftPaid ? 'Akan dicatat (draft)' : 'Akan dihapus (draft)') : (cell.paid ? 'Sudah dibayar - klik untuk detail' : 'Belum dibayar - klik untuk catat')"
             >
               <span v-if="cell.draftPaid !== null" class="material-symbols-outlined text-[16px] fill">{{ cell.draftPaid ? 'pending' : 'delete_forever' }}</span>
               <span v-else-if="cell.paid" class="material-symbols-outlined text-[16px] fill">check</span>
@@ -171,6 +171,85 @@
         </div>
       </form>
     </main>
+
+    <!-- Modal Detail & Pindah/Edit Bulan Infak -->
+    <div v-if="showMonthModal" class="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+      <div class="bg-surface-container-lowest rounded-2xl shadow-xl max-w-md w-full p-6 border border-surface-variant/50 animate-in fade-in zoom-in-95 duration-200">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="font-headline-md text-lg text-primary flex items-center gap-2">
+            <span class="material-symbols-outlined text-secondary fill">event_note</span>
+            Kelola Bulan {{ activeModalMonth?.short }}
+          </h3>
+          <button @click="closeMonthModal" class="p-1 rounded-full hover:bg-surface-variant text-on-surface-variant">
+            <span class="material-symbols-outlined">close</span>
+          </button>
+        </div>
+
+        <div class="space-y-4">
+          <!-- Status Info -->
+          <div class="p-3 rounded-xl bg-surface-container-low border border-outline-variant/30 text-sm">
+            <div class="flex justify-between items-center mb-1">
+              <span class="text-on-surface-variant">Status Saat Ini:</span>
+              <span class="font-bold" :class="activeModalMonth?.paid ? 'text-primary' : 'text-on-surface-variant'">
+                {{ activeModalMonth?.paid ? 'Sudah Dibayar' : 'Belum Dibayar' }}
+              </span>
+            </div>
+            <div v-if="activeModalMonth?.record" class="space-y-1 pt-2 border-t border-outline-variant/30 text-xs text-on-surface-variant">
+              <div>Tanggal Bayar: <span class="font-medium text-on-surface">{{ activeModalMonth.record.tanggal_bayar || '-' }}</span></div>
+              <div>Nominal: <span class="font-medium text-on-surface">Rp {{ Number(activeModalMonth.record.jumlah || 0).toLocaleString('id-ID') }}</span></div>
+            </div>
+          </div>
+
+          <!-- Actions -->
+          <div class="space-y-3">
+            <label class="font-label-md text-xs text-on-surface-variant uppercase tracking-wider">Aksi Cepat:</label>
+            
+            <div class="grid grid-cols-2 gap-2">
+              <button 
+                type="button"
+                @click="modalActionToggle"
+                class="p-3 rounded-xl border border-outline-variant text-sm font-medium flex items-center justify-center gap-2 hover:bg-surface-variant transition-colors"
+                :class="activeModalMonth?.paid ? 'text-error border-error/30 hover:bg-error/10' : 'text-primary border-primary/30 hover:bg-primary/10'"
+              >
+                <span class="material-symbols-outlined text-sm">{{ activeModalMonth?.paid ? 'delete' : 'add_circle' }}</span>
+                {{ activeModalMonth?.paid ? 'Hapus Bulan Ini' : 'Tandai Dibayar' }}
+              </button>
+
+              <button 
+                v-if="activeModalMonth?.paid"
+                type="button"
+                @click="startMoveMonth"
+                class="p-3 rounded-xl border border-primary text-primary text-sm font-medium flex items-center justify-center gap-2 hover:bg-primary/10 transition-colors"
+              >
+                <span class="material-symbols-outlined text-sm">swap_horiz</span>
+                Pindah Bulan
+              </button>
+            </div>
+
+            <!-- Move Month Selection Sub-panel -->
+            <div v-if="isMovingMonth" class="p-3 rounded-xl bg-primary/5 border border-primary/20 space-y-2 mt-2">
+              <p class="text-xs font-medium text-primary">Pindahkan pembayaran ini ke bulan:</p>
+              <select v-model="targetMoveMonth" class="w-full p-2 rounded-lg border border-primary/30 bg-surface-container-lowest text-sm">
+                <option value="" disabled>Pilih bulan tujuan</option>
+                <option v-for="m in monthsList.filter(m => !paidByMonth[m] && m !== activeModalMonth?.short)" :key="m" :value="m">
+                  {{ m }}
+                </option>
+              </select>
+              <div class="flex justify-end gap-2 pt-1">
+                <button type="button" @click="isMovingMonth = false" class="px-3 py-1.5 text-xs text-on-surface-variant hover:bg-surface-variant rounded-lg">Batal</button>
+                <button type="button" @click="confirmMoveMonth" class="px-3 py-1.5 text-xs bg-primary text-white rounded-lg font-medium">Pindahkan</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-6 flex justify-end">
+          <button @click="closeMonthModal" class="px-4 py-2 rounded-xl bg-surface-variant text-on-surface text-sm font-medium hover:bg-surface-variant/80">
+            Tutup
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -296,6 +375,55 @@ const toggleMonthDraft = (cell) => {
     // Currently unpaid - draft to add
     draftMonths.value[cell.short] = true;
   }
+};
+
+// Modal state for month detail/actions
+const showMonthModal = ref(false);
+const activeModalMonth = ref(null);
+const isMovingMonth = ref(false);
+const targetMoveMonth = ref('');
+
+const openMonthModal = (cell) => {
+  activeModalMonth.value = cell;
+  isMovingMonth.value = false;
+  targetMoveMonth.value = '';
+  showMonthModal.value = true;
+};
+
+const closeMonthModal = () => {
+  showMonthModal.value = false;
+  activeModalMonth.value = null;
+  isMovingMonth.value = false;
+  targetMoveMonth.value = '';
+};
+
+const modalActionToggle = () => {
+  if (!activeModalMonth.value) return;
+  const short = activeModalMonth.value.short;
+  if (activeModalMonth.value.paid) {
+    // Mark for deletion in draft
+    draftMonths.value[short] = false;
+  } else {
+    // Mark for addition in draft
+    draftMonths.value[short] = true;
+  }
+  closeMonthModal();
+};
+
+const startMoveMonth = () => {
+  isMovingMonth.value = true;
+};
+
+const confirmMoveMonth = () => {
+  if (!activeModalMonth.value || !targetMoveMonth.value) return;
+  const fromShort = activeModalMonth.value.short;
+  const toShort = targetMoveMonth.value;
+
+  // Draft: delete from old month, add to new month
+  draftMonths.value[fromShort] = false;
+  draftMonths.value[toShort] = true;
+
+  closeMonthModal();
 };
 
 const form = reactive({
