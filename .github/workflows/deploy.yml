@@ -40,6 +40,7 @@ jobs:
           REMOTE_HOST: ${{ secrets.SSH_HOST }}
           REMOTE_USER: ${{ secrets.SSH_USER }}
           TARGET: ${{ secrets.SSH_TARGET_DIR }}
+          SOURCE: "."
           ARGS: "-rlgoDzvc -i --delete"
           EXCLUDE: "/.git/, /.github/, /node_modules/, /tests/, /.env, /storage/logs/*, /storage/framework/sessions/*, /storage/framework/cache/data/*"
 
