@@ -21,7 +21,7 @@ jobs:
 
       - name: Install dependencies & Build frontend
         run: |
-          npm install
+          npm install --no-audit --no-fund
           npm run build
 
       - name: Setup PHP
