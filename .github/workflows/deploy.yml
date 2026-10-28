@@ -31,10 +31,10 @@ jobs:
 
       - name: Install Composer dependencies
         run: |
-          composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist
+          composer install --no-dev --optimize-autلوader --no-interaction --prefer-dist
 
       - name: Deploy files via SCP to cPanel
-        uses: appleboy/scp-action@v1.0.3
+        uses: appleboy/scp-action@v1.0.4
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
@@ -44,7 +44,7 @@ jobs:
           target: ${{ secrets.SSH_TARGET_DIR }}
           strip_components: 0
           rm: true
-          args: "--exclude=.git --exclude=.github --exclude=node_modules --exclude=tests --exclude=.env --exclude=*.zip --exclude=cookie*.txt --exclude=response.json --exclude=*.log --exclude=composer.phar --exclude=composer-2.2.phar --exclude=database/*.sqlite --exclude=.phpunit.result.cache --exclude=.phpunit.cache/* --exclude=public/hot --exclude=storage/logs/* --exclude=storage/framework/sessions/* --exclude=storage/framework/cache/data/*"
+          ignore: true
 
       - name: Run post-deploy commands on cPanel
         uses: appleboy/ssh-action@v1.0.3
