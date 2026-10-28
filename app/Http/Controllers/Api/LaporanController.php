@@ -65,18 +65,41 @@ class LaporanController extends Controller
         $kelas = Kelas::findOrFail($request->kelas_id);
         [$periodeMulai, $periodeAkhir] = $this->periodeDariBulan($request->bulan);
 
-        $rows = Infak::with('siswa')
+        $infaks = Infak::with('siswa')
             ->where('kelas_id', $kelas->id)
             ->whereBetween('tanggal_bayar', [$periodeMulai, $periodeAkhir])
-            ->get()
-            ->sortBy(fn ($i) => $i->siswa ? $i->siswa->nama_lengkap : '')
-            ->values()
-            ->map(fn ($i) => [
-                'siswa' => $i->siswa ? $i->siswa->nama_lengkap : 'Siswa Tidak Diketahui',
-                'tanggal_bayar' => substr((string) $i->tanggal_bayar, 0, 10),
-                'jumlah' => (float) $i->jumlah,
-                'bulan' => $i->bulan,
-            ]);
+            ->get();
+
+        // Kelompokkan per siswa agar yang bayar beberapa bulan digabung menjadi 1 baris
+        $grouped = [];
+        foreach ($infaks as $i) {
+            $siswaId = $i->siswa_id;
+            $namaSiswa = $i->siswa ? $i->siswa->nama_lengkap : 'Siswa Tidak Diketahui';
+
+            if (!isset($grouped[$siswaId])) {
+                $grouped[$siswaId] = [
+                    'siswa' => $namaSiswa,
+                    'tanggal_bayar' => substr((string) $i->tanggal_bayar, 0, 10),
+                    'jumlah' => 0,
+                    'bulan_list' => [],
+                ];
+            }
+
+            $grouped[$siswaId]['jumlah'] += (float) $i->jumlah;
+            if ($i->bulan && !in_array($i->bulan, $grouped[$siswaId]['bulan_list'])) {
+                $grouped[$siswaId]['bulan_list'][] = $i->bulan;
+            }
+        }
+
+        // Format ke bentuk rows dengan keterangan bulan yang digabung
+        $rows = collect(array_values($grouped))->sortBy('siswa')->values()->map(function ($item) {
+            return [
+                'siswa' => $item['siswa'],
+                'tanggal_bayar' => $item['tanggal_bayar'],
+                'jumlah' => $item['jumlah'],
+                'bulan' => implode(', ', $item['bulan_list']), // Contoh: "July, August, September"
+            ];
+        });
 
         return response()->json([
             'kelas' => $kelas->nama_kelas,
