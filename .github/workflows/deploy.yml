@@ -1,4 +1,4 @@
-name: Deploy to cPanel via SSH
+name: Deploy to cPanel via SCP
 
 on:
   push:
@@ -33,16 +33,18 @@ jobs:
         run: |
           composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist
 
-      - name: Deploy via rsync over SSH
-        uses: easingthemes/ssh-deploy@v5.0.0
-        env:
-          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-          REMOTE_HOST: ${{ secrets.SSH_HOST }}
-          REMOTE_USER: ${{ secrets.SSH_USER }}
-          TARGET: ${{ secrets.SSH_TARGET_DIR }}
-          SOURCE: "."
-          ARGS: "-rlgoDzvc -i --delete"
-          EXCLUDE: "/.git/, /.github/, /node_modules/, /tests/, /.env, /storage/logs/*, /storage/framework/sessions/*, /storage/framework/cache/data/*"
+      - name: Deploy files via SCP to cPanel
+        uses: appleboy/scp-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          source: "."
+          target: ${{ secrets.SSH_TARGET_DIR }}
+          strip_components: 0
+          rm: true
+          args: "--exclude=.git --exclude=.github --exclude=node_modules --exclude=tests --exclude=.env --exclude=*.zip --exclude=cookie*.txt --exclude=response.json --exclude=*.log --exclude=composer.phar --exclude=composer-2.2.phar --exclude=database/*.sqlite --exclude=.phpunit.result.cache --exclude=.phpunit.cache/* --exclude=public/hot --exclude=storage/logs/* --exclude=storage/framework/sessions/* --exclude=storage/framework/cache/data/*"
 
       - name: Run post-deploy commands on cPanel
         uses: appleboy/ssh-action@v1.0.3
