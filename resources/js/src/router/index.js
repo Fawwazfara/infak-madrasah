@@ -7,7 +7,7 @@ import SiswaFormView from '../views/admin/SiswaFormView.vue';
 import InfakFormView from '../views/admin/InfakFormView.vue';
 import GuruListView from '../views/admin/GuruListView.vue';
 import PengeluaranView from '../views/admin/PengeluaranView.vue';
-import LaporanView from '../views/admin/LaporanView.vue';
+import LaporanView from '../views/shared/LaporanView.vue';
 import PesanView from '../views/admin/PesanView.vue';
 import RiwayatView from '../views/admin/RiwayatView.vue';
 
@@ -102,6 +102,11 @@ const router = createRouter({
           component: () => import('../views/guru/SiswaListView.vue')
         },
         {
+          path: 'laporan',
+          name: 'guru.laporan',
+          component: LaporanView
+        },
+        {
           path: 'pesan',
           name: 'guru.pesan',
           component: () => import('../views/guru/PesanView.vue')
@@ -114,10 +119,24 @@ const router = createRouter({
 router.beforeEach((to, from, next) => {
   const publicPages = ['/login'];
   const authRequired = !publicPages.includes(to.path);
-  const loggedIn = localStorage.getItem('user');
+  let user = null;
+  try {
+    const raw = localStorage.getItem('user');
+    user = raw ? JSON.parse(raw) : null;
+  } catch {
+    user = null;
+  }
 
-  if (authRequired && !loggedIn) {
+  if (authRequired && !user) {
     return next('/login');
+  }
+
+  if (to.path === '/login' && user) {
+    return next(user.role === 'admin' ? '/admin/dashboard' : '/guru/dashboard');
+  }
+
+  if (to.path.startsWith('/admin') && user?.role !== 'admin') {
+    return next('/guru/dashboard');
   }
 
   next();

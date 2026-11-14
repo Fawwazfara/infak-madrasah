@@ -1,170 +1,183 @@
 <template>
-  <div class="h-screen overflow-hidden bg-background text-on-surface antialiased flex flex-col md:flex-row">
-    
+  <div class="h-screen overflow-hidden bg-[#F5F3EE] text-[#1C1917] flex flex-col md:flex-row">
     <!-- Mobile Drawer Backdrop -->
-    <transition
-      enter-active-class="transition-opacity duration-300"
+    <Transition
+      enter-active-class="transition-opacity duration-200 ease-out"
       enter-from-class="opacity-0"
       enter-to-class="opacity-100"
-      leave-active-class="transition-opacity duration-300"
+      leave-active-class="transition-opacity duration-150 ease-out"
       leave-from-class="opacity-100"
       leave-to-class="opacity-0"
     >
-      <div 
-        v-if="isDrawerOpen" 
-        @click="isDrawerOpen = false" 
-        class="fixed inset-0 bg-black/50 z-40 md:hidden"
+      <div
+        v-if="isDrawerOpen"
+        @click="isDrawerOpen = false"
+        class="fixed inset-0 bg-[#1C1917]/45 backdrop-blur-[2px] z-40 md:hidden overscroll-contain"
       ></div>
-    </transition>
+    </Transition>
 
-    <!-- Navigation Sidebar/Drawer -->
-    <!-- On mobile: Fixed sliding drawer. On desktop: Permanent left sidebar -->
-    <aside 
+    <!-- Navigation Sidebar / Drawer -->
+    <aside
       :class="[
-        'fixed inset-y-0 left-0 w-[280px] h-screen bg-surface z-50 shadow-2xl md:shadow-none md:border-r md:border-surface-variant transition-transform duration-300 ease-in-out md:relative md:translate-x-0',
-        isDrawerOpen ? 'translate-x-0' : '-translate-x-full'
+        'fixed inset-y-0 left-0 w-[264px] h-screen bg-[#FDFCF9] border-r border-black/[0.06] z-50 md:z-20 flex flex-col shrink-0 transition-transform duration-200 ease-out md:relative md:translate-x-0 overscroll-contain',
+        isDrawerOpen ? 'translate-x-0 shadow-[var(--shadow-elevated)]' : '-translate-x-full'
       ]"
     >
-      <div class="p-md border-b border-surface-variant flex items-center justify-between">
-        <div class="flex items-center gap-2">
-          <div class="w-8 h-8 bg-primary rounded-lg flex items-center justify-center text-white">
-            <span class="material-symbols-outlined text-xl">school</span>
+      <div class="h-16 px-5 border-b border-black/[0.06] flex items-center justify-between shrink-0">
+        <div class="flex items-center gap-3 min-w-0">
+          <div class="w-9 h-9 bg-[#292524] rounded-[10px] flex items-center justify-center text-[#FDFCF9] shadow-[var(--shadow-btn-navy)] shrink-0">
+            <UiIcon name="school" :size="18" :weight="600" />
           </div>
-          <span class="font-headline-md text-primary">Madrasah</span>
+          <div class="min-w-0">
+            <p class="font-bold text-sm text-[#1C1917] leading-tight truncate">Assajjad</p>
+            <p class="text-[11px] font-medium text-[#78716C] leading-tight truncate">Admin Tata Usaha</p>
+          </div>
         </div>
-        <!-- Close Button (Mobile Only) -->
-        <button 
-          @click="isDrawerOpen = false" 
-          class="p-2 rounded-full hover:bg-surface-variant text-on-surface-variant md:hidden"
+        <button
+          @click="isDrawerOpen = false"
+          aria-label="Tutup menu"
+          class="min-w-[36px] min-h-[36px] rounded-[9px] text-[#78716C] hover:text-[#1C1917] hover:bg-[#ECE8DF] flex items-center justify-center md:hidden transition-[background-color,color,transform] duration-150 ease-out active:scale-[0.96]"
         >
-          <span class="material-symbols-outlined">close</span>
+          <UiIcon name="close" :size="18" :weight="600" />
         </button>
       </div>
-      
-      <nav @click="isDrawerOpen = false" class="p-2 flex flex-col gap-1 overflow-y-auto h-[calc(100vh-73px)]">
-        <router-link 
-          to="/admin/dashboard" 
-          active-class="bg-secondary-container text-on-secondary-container font-semibold"
-          class="flex items-center gap-4 px-4 py-3 rounded-lg hover:bg-surface-container-high text-on-surface-variant font-label-md transition-colors"
-        >
-          <span class="material-symbols-outlined fill">dashboard</span>
-          <span>Dashboard</span>
+
+      <nav @click="isDrawerOpen = false" class="flex-1 px-3 py-4 flex flex-col gap-1 overflow-y-auto overscroll-contain">
+        <p class="px-3 pt-1 pb-1.5 text-[11px] font-bold uppercase tracking-wider text-[#78716C]">Utama</p>
+        <router-link v-for="item in navPrimary" :key="item.to" :to="item.to" :class="linkClass(item.to)">
+          <UiIcon :name="item.icon" :size="18" :weight="isActive(item.to) ? 600 : 500" :filled="isActive(item.to)" />
+          <span>{{ item.label }}</span>
         </router-link>
-        <router-link 
-          to="/admin/siswa" 
-          active-class="bg-secondary-container text-on-secondary-container font-semibold"
-          class="flex items-center gap-4 px-4 py-3 rounded-lg hover:bg-surface-container-high text-on-surface-variant font-label-md transition-colors"
-        >
-          <span class="material-symbols-outlined">group</span>
-          <span>Kelas &amp; Siswa</span>
+
+        <p class="px-3 pt-4 pb-1.5 text-[11px] font-bold uppercase tracking-wider text-[#78716C]">Keuangan &amp; Laporan</p>
+        <router-link v-for="item in navFinance" :key="item.to" :to="item.to" :class="linkClass(item.to)">
+          <UiIcon :name="item.icon" :size="18" :weight="isActive(item.to) ? 600 : 500" :filled="isActive(item.to)" />
+          <span>{{ item.label }}</span>
         </router-link>
-        <router-link 
-          to="/admin/guru" 
-          active-class="bg-secondary-container text-on-secondary-container font-semibold"
-          class="flex items-center gap-4 px-4 py-3 rounded-lg hover:bg-surface-container-high text-on-surface-variant font-label-md transition-colors"
-        >
-          <span class="material-symbols-outlined">badge</span>
-          <span>Manajemen Guru</span>
+
+        <p class="px-3 pt-4 pb-1.5 text-[11px] font-bold uppercase tracking-wider text-[#78716C]">Lainnya</p>
+        <router-link v-for="item in navOther" :key="item.to" :to="item.to" :class="linkClass(item.to)">
+          <UiIcon :name="item.icon" :size="18" :weight="isActive(item.to) ? 600 : 500" :filled="isActive(item.to)" />
+          <span>{{ item.label }}</span>
         </router-link>
-        <div class="h-px bg-surface-variant my-2 mx-4"></div>
-        <router-link 
-          to="/admin/infak/create" 
-          active-class="bg-secondary-container text-on-secondary-container font-semibold"
-          class="flex items-center gap-4 px-4 py-3 rounded-lg hover:bg-surface-container-high text-on-surface-variant font-label-md transition-colors"
-        >
-          <span class="material-symbols-outlined">volunteer_activism</span>
-          <span>Input Infak</span>
-        </router-link>
-        <router-link 
-          to="/admin/pengeluaran" 
-          active-class="bg-secondary-container text-on-secondary-container font-semibold"
-          class="flex items-center gap-4 px-4 py-3 rounded-lg hover:bg-surface-container-high text-on-surface-variant font-label-md transition-colors"
-        >
-          <span class="material-symbols-outlined">money_off</span>
-          <span>Pengeluaran</span>
-        </router-link>
-        <router-link 
-          to="/admin/laporan" 
-          active-class="bg-secondary-container text-on-secondary-container font-semibold"
-          class="flex items-center gap-4 px-4 py-3 rounded-lg hover:bg-surface-container-high text-on-surface-variant font-label-md transition-colors"
-        >
-          <span class="material-symbols-outlined">account_balance</span>
-          <span>Laporan Keuangan</span>
-        </router-link>
-        <div class="h-px bg-surface-variant my-2 mx-4"></div>
-        <router-link 
-          to="/admin/pesan" 
-          active-class="bg-secondary-container text-on-secondary-container font-semibold"
-          class="flex items-center gap-4 px-4 py-3 rounded-lg hover:bg-surface-container-high text-on-surface-variant font-label-md transition-colors"
-        >
-          <span class="material-symbols-outlined">mail</span>
-          <span>Pesan</span>
-        </router-link>
-        <router-link 
-          to="/admin/riwayat" 
-          active-class="bg-secondary-container text-on-secondary-container font-semibold"
-          class="flex items-center gap-4 px-4 py-3 rounded-lg hover:bg-surface-container-high text-on-surface-variant font-label-md transition-colors"
-        >
-          <span class="material-symbols-outlined">history</span>
-          <span>Riwayat Aktivitas</span>
-        </router-link>
+
         <div class="flex-grow"></div>
-        <button @click="handleLogout" class="flex items-center gap-4 px-4 py-3 rounded-lg hover:bg-error-container text-error font-label-md transition-colors w-full mt-4 mb-4">
-          <span class="material-symbols-outlined">logout</span>
-          <span>Logout</span>
-        </button>
+
+        <div class="pt-3 mt-3 border-t border-black/[0.06]">
+          <button
+            @click="handleLogout"
+            class="w-full min-h-[42px] px-3 py-2 rounded-[10px] text-sm font-semibold text-[#9F1239] hover:bg-[#FDF2F4] flex items-center gap-3 transition-[background-color,transform] duration-150 ease-out active:scale-[0.96]"
+          >
+            <UiIcon name="logout" :size="18" :weight="600" />
+            <span>Keluar</span>
+          </button>
+        </div>
       </nav>
     </aside>
 
     <!-- Main Content Area -->
     <div class="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
-      
-      <!-- TopAppBar -->
-      <header class="bg-surface shadow-sm sticky top-0 z-30 transition-all duration-200 shrink-0">
-        <div class="flex justify-between items-center w-full px-container-margin h-16 max-w-7xl mx-auto">
-          <div class="flex items-center gap-md">
-            <!-- Hamburger Menu (Mobile Only) -->
-            <button 
-              @click="isDrawerOpen = true" 
-              class="p-2 -ml-2 rounded-full hover:bg-primary-container/10 text-primary transition-all active:scale-95 focus:outline-none md:hidden"
+      <header class="h-16 bg-[#FDFCF9]/90 backdrop-blur-md border-b border-black/[0.06] shrink-0 z-10 sticky top-0">
+        <div class="h-full max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-4">
+          <div class="flex items-center gap-3 min-w-0">
+            <button
+              @click="isDrawerOpen = true"
+              aria-label="Buka menu navigasi"
+              class="min-w-[40px] min-h-[40px] -ml-1.5 rounded-[10px] text-[#44403C] hover:text-[#1C1917] hover:bg-[#ECE8DF] flex items-center justify-center md:hidden transition-[background-color,transform] duration-150 ease-out active:scale-[0.96]"
             >
-              <span class="material-symbols-outlined text-2xl">menu</span>
+              <UiIcon name="menu" :size="20" :weight="600" />
             </button>
-            
-            <div class="w-10 h-10 rounded-full overflow-hidden shrink-0 border-2 border-primary-container bg-surface-variant flex items-center justify-center">
-              <img alt="User Profile Picture" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD7fec1vwfjlEDZj5zSc2WGTkcPTgKpeEwDHMdhcMfCTWqRA40TISQrMpjdIhKflew27um5YSO3siL4zuFhcviNOQxlF7q2Tj9aS_FSWqwMnpFmcuiZ3eJre6P6-1yqkphGPyehWHTUB7YMjt5OJkqqK8OL6XoIXoN8dzZRtuh8X42KYCAtLt6s34cSud8sKd1rlKO-6xbykrMRL6GcmL2np1z7GgZ3OoPflDi4Ea4nF_pXVWXYT9kGgPsU3AnmHT4hX5mZ9AVUi8ET">
-            </div>
-            <div>
-              <p class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Madrasah Manager</p>
-              <h1 class="font-headline-lg-mobile text-headline-lg-mobile text-primary truncate max-w-[200px] md:max-w-[400px]">Assalamu'alaikum, Admin</h1>
+            <div class="min-w-0">
+              <p class="text-[11px] font-semibold uppercase tracking-wider text-[#78716C] hidden sm:block">Portal Administrasi Madrasah</p>
+              <h1 class="text-base sm:text-lg font-bold text-[#1C1917] truncate">{{ pageTitle }}</h1>
             </div>
           </div>
-          
-          <div class="flex items-center gap-2">
-            <button class="p-2 rounded-full hover:bg-primary-container/10 text-primary transition-all duration-200 active:scale-95 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2">
-              <span class="material-symbols-outlined text-2xl" data-icon="notifications">notifications</span>
-            </button>
+
+          <div class="flex items-center gap-3 shrink-0">
+            <div class="hidden sm:flex flex-col text-right">
+              <span class="text-xs font-bold text-[#1C1917] truncate max-w-[160px]">{{ user.name || 'Admin Tata Usaha' }}</span>
+              <span class="text-[11px] text-[#78716C]">Administrator</span>
+            </div>
+            <div class="w-9 h-9 rounded-[10px] bg-[#292524] text-[#FDFCF9] flex items-center justify-center font-bold text-xs shadow-[var(--shadow-btn-navy)]">
+              {{ initials }}
+            </div>
           </div>
         </div>
       </header>
 
-      <!-- Page Content Router View -->
-      <div class="flex-1 overflow-y-auto w-full relative pb-16 md:pb-0">
+      <main class="flex-1 overflow-y-auto w-full relative">
         <router-view></router-view>
-      </div>
-      
+      </main>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
+import { ref, computed, onMounted } from 'vue';
+import { useRouter, useRoute } from 'vue-router';
 import axios from 'axios';
 import { subscribeToPushNotifications } from '@/utils/pushHelper';
 
 const router = useRouter();
+const route = useRoute();
 const isDrawerOpen = ref(false);
+
+const user = computed(() => {
+  try {
+    return JSON.parse(localStorage.getItem('user') || '{}');
+  } catch {
+    return {};
+  }
+});
+
+const initials = computed(() => {
+  const name = (user.value.name || 'Admin').trim();
+  const parts = name.split(/\s+/);
+  return parts.length >= 2
+    ? (parts[0][0] + parts[1][0]).toUpperCase()
+    : name.substring(0, 2).toUpperCase();
+});
+
+const navPrimary = [
+  { to: '/admin/dashboard', label: 'Dashboard', icon: 'dashboard' },
+  { to: '/admin/siswa', label: 'Kelas & Siswa', icon: 'groups' },
+  { to: '/admin/guru', label: 'Manajemen Guru', icon: 'badge' },
+];
+
+const navFinance = [
+  { to: '/admin/infak/create', label: 'Catat Infak', icon: 'volunteer_activism' },
+  { to: '/admin/pengeluaran', label: 'Pengeluaran & Kasbon', icon: 'money_off' },
+  { to: '/admin/laporan', label: 'Laporan Keuangan', icon: 'account_balance' },
+];
+
+const navOther = [
+  { to: '/admin/pesan', label: 'Pesan Guru', icon: 'mail' },
+  { to: '/admin/riwayat', label: 'Riwayat Aktivitas', icon: 'history' },
+];
+
+const TITLES = {
+  'admin.dashboard': 'Dashboard Keuangan',
+  'admin.siswa': 'Monitoring Pembayaran & Siswa',
+  'admin.siswa.create': 'Tambah Data Siswa',
+  'admin.siswa.edit': 'Ubah Data Siswa & Infak',
+  'admin.infak.create': 'Catat Penerimaan Infak',
+  'admin.guru': 'Manajemen Akun Guru',
+  'admin.pengeluaran': 'Pengeluaran & Kasbon Guru',
+  'admin.laporan': 'Laporan Keuangan Bulanan',
+  'admin.pesan': 'Pesan Masuk Guru',
+  'admin.riwayat': 'Riwayat Aktivitas',
+};
+
+const pageTitle = computed(() => TITLES[route.name] || 'Admin Madrasah');
+
+const isActive = (path) => route.path === path || route.path.startsWith(path + '/');
+
+const linkClass = (path) => [
+  'min-h-[42px] px-3 py-2 rounded-[10px] text-sm font-medium flex items-center gap-3 transition-[background-color,color,box-shadow,transform] duration-150 ease-out active:scale-[0.98]',
+  isActive(path)
+    ? 'bg-[#292524] text-[#FDFCF9] font-semibold shadow-[var(--shadow-btn-navy)]'
+    : 'text-[#44403C] hover:text-[#1C1917] hover:bg-[#ECE8DF]'
+];
 
 const handleLogout = async () => {
   try {
@@ -176,8 +189,6 @@ const handleLogout = async () => {
     router.push('/login');
   }
 };
-
-
 
 onMounted(() => {
   subscribeToPushNotifications();

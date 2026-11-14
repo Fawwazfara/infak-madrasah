@@ -23,6 +23,9 @@
     <div class="header">
         <h1>LAPORAN KEUANGAN INFAK MADRASAH</h1>
         <p>Bulan: {{ $bulan }} {{ $tahun }}</p>
+        @if(!empty($is_guru_view))
+            <p style="font-size: 10px; color: #555;">Salinan untuk Guru (entri kasbon guru disamarkan)</p>
+        @endif
     </div>
 
     <h3>1. Pemasukan dari Infak Siswa</h3>

@@ -64,6 +64,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/pengeluaran', [PengeluaranController::class, 'index']);
     Route::post('/pengeluaran', [PengeluaranController::class, 'store']);
+    Route::put('/pengeluaran/{id}', [PengeluaranController::class, 'update']);
     Route::delete('/pengeluaran/{id}', [PengeluaranController::class, 'destroy']);
 
     Route::get('/log-aktivitas', [RiwayatController::class, 'index']);

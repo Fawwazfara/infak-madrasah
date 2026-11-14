@@ -30,9 +30,11 @@ class LaporanController extends Controller
     {
         // Parameter bulan (misal: "Agustus")
         $bulan = $request->query('bulan', date('F'));
+        $isGuru = $request->user()?->role === 'guru';
 
-        $data = $this->hitungLaporan($bulan);
+        $data = $this->hitungLaporan($bulan, $isGuru);
         $data['bulan'] = $bulan;
+        $data['is_guru_view'] = $isGuru;
 
         return response()->json($data);
     }
@@ -40,10 +42,12 @@ class LaporanController extends Controller
     public function cetakPdf(Request $request)
     {
         $bulan = $request->query('bulan', date('F'));
+        $isGuru = $request->user()?->role === 'guru';
 
-        $data = $this->hitungLaporan($bulan);
+        $data = $this->hitungLaporan($bulan, $isGuru);
         $data['bulan'] = $bulan;
         $data['tahun'] = date('Y');
+        $data['is_guru_view'] = $isGuru;
 
         $pdf = Pdf::loadView('laporan_pdf', $data);
         return $pdf->download('laporan_keuangan_' . strtolower($bulan) . '_' . $data['tahun'] . '.pdf');
@@ -123,7 +127,8 @@ class LaporanController extends Controller
             'Mei' => '05', 'Juni' => '06', 'Juli' => '07', 'Agustus' => '08',
             'September' => '09', 'Oktober' => '10', 'November' => '11', 'Desember' => '12',
             'January' => '01', 'February' => '02', 'March' => '03', 'May' => '05',
-            'June' => '06', 'July' => '07', 'August' => '08', 'October' => '10', 'December' => '12'
+            'June' => '06', 'July' => '07', 'August' => '08', 'October' => '10',
+            'November' => '11', 'December' => '12'
         ];
 
         $bulanAngka = $bulanIndoKeBulanAngka[$bulan] ?? date('m');
@@ -137,9 +142,10 @@ class LaporanController extends Controller
 
     /**
      * Hitung laporan keuangan satu bulan: pemasukan per kelas (1 query grup,
-     * bukan 1 query per kelas) + daftar pengeluaran.
+     * bukan 1 query per kelas) + daftar pengeluaran (kasbon guru disamarkan
+     * bila dilihat oleh role guru).
      */
-    private function hitungLaporan(string $bulan): array
+    private function hitungLaporan(string $bulan, bool $anonymizeKasbon = false): array
     {
         $kelasList = Kelas::all();
         $kelasOrder = [
@@ -176,7 +182,12 @@ class LaporanController extends Controller
         // Pengeluaran List (berdasarkan bulan tanggal)
         $pengeluaranList = Pengeluaran::whereBetween('tanggal', [$periodeMulai, $periodeAkhir])
             ->orderBy('tanggal', 'desc')
+            ->orderBy('id', 'desc')
             ->get();
+
+        if ($anonymizeKasbon) {
+            $pengeluaranList = Pengeluaran::maskKasbonForGuru($pengeluaranList);
+        }
 
         $totalPengeluaran = $pengeluaranList->sum('jumlah');
 

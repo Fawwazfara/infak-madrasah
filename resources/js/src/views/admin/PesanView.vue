@@ -1,328 +1,315 @@
 <template>
-  <div class="flex-1 flex flex-col min-w-0 h-full bg-surface-dim md:bg-transparent overflow-hidden relative">
-    
-    <!-- Mobile: Judul Halaman saat di daftar chat -->
-    <div class="px-container-margin pt-4 pb-2 md:hidden" v-if="!activeChat">
-      <h2 class="font-headline-lg-mobile text-headline-lg-mobile text-on-background">Madrasah Chat</h2>
+  <div class="space-y-4">
+    <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-2 ui-stagger ui-stagger-1">
+      <div>
+        <span class="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-[#A8551E] mb-1">
+          <UiIcon name="forum" :size="14" />
+          Koordinasi Pengurus &amp; Guru
+        </span>
+        <h2 class="text-2xl sm:text-3xl font-extrabold text-[#1C1917] tracking-tight">Pesan Guru</h2>
+      </div>
     </div>
 
-    <main class="w-full max-w-6xl mx-auto md:px-container-margin md:py-lg flex flex-1 h-full overflow-hidden">
-      
-      <!-- Kontainer Utama (Card untuk Desktop) -->
-      <div class="flex w-full h-full md:bg-surface-container-lowest md:rounded-3xl md:shadow-md md:border border-outline-variant/30 overflow-hidden relative">
-        
-        <!-- KOLOM KIRI: Daftar Obrolan (Tampil jika desktop, atau jika mobile dan tidak ada chat aktif) -->
-        <div 
-          v-show="!activeChat || isDesktop" 
-          class="w-full md:w-[350px] lg:w-[400px] flex flex-col h-full bg-surface md:bg-transparent border-r border-outline-variant/30 shrink-0"
-        >
-          <!-- Search Bar -->
-          <div class="p-4 bg-surface md:bg-transparent sticky top-0 z-10 border-b border-outline-variant/30 md:border-none md:pb-2">
-            <div class="relative">
-              <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant">search</span>
-              <input 
-                type="text" 
-                v-model="searchQuery"
-                placeholder="Cari pesan atau guru..." 
-                class="w-full h-12 pl-10 pr-4 bg-surface-container-lowest md:bg-surface-container rounded-xl border border-outline-variant/50 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary text-body-md transition-colors"
-              >
-            </div>
-          </div>
-
-          <!-- Chat List -->
-          <div class="flex-1 overflow-y-auto bg-surface-container-lowest md:bg-transparent rounded-t-3xl md:rounded-none">
-            <div 
-              v-for="chat in filteredChatList" 
-              :key="chat.id"
-              @click="openChat(chat)"
-              :class="[
-                'flex items-center gap-3 p-4 cursor-pointer transition-colors border-b border-outline-variant/20 hover:bg-surface-container-low',
-                activeChat && activeChat.id === chat.id ? 'bg-primary/5 md:bg-primary/10' : ''
-              ]"
-            >
-              <!-- Avatar -->
-              <div class="relative shrink-0">
-                <div class="w-12 h-12 rounded-full bg-secondary-container text-on-secondary-container flex items-center justify-center overflow-hidden">
-                  <span v-if="!chat.avatar" class="font-headline-sm">{{ getInitials(chat.name) }}</span>
-                  <img v-else :src="chat.avatar" alt="Avatar" class="w-full h-full object-cover">
-                </div>
-                <!-- Online Indicator -->
-                <div v-if="chat.online" class="absolute bottom-0 right-0 w-3.5 h-3.5 bg-primary border-2 border-surface-container-lowest rounded-full"></div>
-              </div>
-              
-              <!-- Content -->
-              <div class="flex-1 min-w-0">
-                <div class="flex justify-between items-center mb-0.5">
-                  <h3 class="font-label-md text-[15px] font-bold text-on-surface truncate pr-2">{{ chat.name }}</h3>
-                  <span :class="['font-label-sm text-[11px] shrink-0', chat.unread > 0 ? 'text-primary' : 'text-on-surface-variant']">{{ chat.lastTime }}</span>
-                </div>
-                <div class="flex justify-between items-center">
-                  <p class="font-body-sm text-[13px] text-on-surface-variant truncate pr-2">{{ chat.lastMessage }}</p>
-                  <div v-if="chat.unread > 0" class="w-5 h-5 rounded-full bg-primary text-white flex items-center justify-center font-label-sm text-[10px] shrink-0">
-                    {{ chat.unread }}
-                  </div>
-                </div>
-              </div>
-            </div>
+    <div class="ui-panel overflow-hidden flex h-[calc(100vh-200px)] min-h-[540px] ui-stagger ui-stagger-2">
+      <!-- Chat List Sidebar -->
+      <aside
+        class="w-full md:w-80 lg:w-96 border-r border-[#E7E2D8] flex flex-col bg-[#FDFCF9]"
+        :class="{ 'hidden md:flex': selectedUser }"
+      >
+        <div class="p-4 border-b border-[#E7E2D8]">
+          <div class="relative">
+            <UiIcon name="search" :size="16" class="text-[#78716C] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              v-model="searchQuery"
+              type="text"
+              placeholder="Cari guru atau pesan..."
+              class="ui-input !min-h-[40px] !py-1.5 pl-10 text-sm bg-[#F7F4ED] border-transparent focus:bg-[#FDFCF9]"
+            />
           </div>
         </div>
 
-        <!-- KOLOM KANAN: Ruang Obrolan (Tampil jika desktop, atau jika mobile dan ada chat aktif) -->
-        <div 
-          v-if="activeChat || isDesktop" 
-          :class="[
-            'flex-1 flex flex-col h-full bg-[#f6f7f2] relative',
-            !activeChat && isDesktop ? 'items-center justify-center' : ''
-          ]"
-        >
-          <!-- State Kosong (Hanya Desktop) -->
-          <div v-if="!activeChat && isDesktop" class="text-center p-8">
-            <div class="w-24 h-24 bg-surface-container rounded-full flex items-center justify-center mx-auto mb-4 text-primary/40">
-              <span class="material-symbols-outlined text-[48px]">forum</span>
+        <div class="flex-1 overflow-y-auto divide-y divide-[#ECE8DF]">
+          <div v-if="isLoadingContacts" class="p-4 space-y-3">
+            <div v-for="i in 4" :key="i" class="flex items-center gap-3 animate-pulse">
+              <div class="w-11 h-11 rounded-full bg-[#ECE8DF]"></div>
+              <div class="flex-1 space-y-2">
+                <div class="h-3.5 bg-[#ECE8DF] rounded w-1/2"></div>
+                <div class="h-3 bg-[#F7F4ED] rounded w-3/4"></div>
+              </div>
             </div>
-            <h3 class="font-headline-md text-on-surface mb-2">Madrasah Chat</h3>
-            <p class="text-on-surface-variant font-body-md">Pilih salah satu guru di sebelah kiri untuk mulai mengirim pesan.</p>
           </div>
 
-          <!-- Ruang Obrolan Aktif -->
-          <template v-else-if="activeChat">
-            <!-- Chat Header -->
-            <div class="h-16 px-4 bg-surface-container-lowest border-b border-outline-variant/30 flex items-center gap-3 shrink-0 z-10 shadow-sm">
-              <button class="md:hidden p-2 -ml-2 text-on-surface-variant rounded-full hover:bg-surface-container" @click="closeChat">
-                <span class="material-symbols-outlined">arrow_back</span>
-              </button>
-              
-              <div class="w-10 h-10 rounded-full bg-secondary-container text-on-secondary-container flex items-center justify-center overflow-hidden shrink-0">
-                <span v-if="!activeChat.avatar" class="font-label-md">{{ getInitials(activeChat.name) }}</span>
-                <img v-else :src="activeChat.avatar" alt="Avatar" class="w-full h-full object-cover">
+          <button
+            v-else
+            v-for="contact in filteredContacts"
+            :key="contact.id"
+            type="button"
+            @click="selectContact(contact)"
+            class="w-full text-left flex items-center gap-3.5 px-4 py-3.5 cursor-pointer transition-colors"
+            :class="selectedUser?.id === contact.id ? 'bg-[#F7F4ED]' : 'hover:bg-[#F7F4ED]/60'"
+          >
+            <div class="relative shrink-0">
+              <div
+                class="w-11 h-11 rounded-full flex items-center justify-center font-bold text-sm"
+                :class="selectedUser?.id === contact.id ? 'bg-[#292524] text-[#FDFCF9]' : 'bg-[#ECE8DF] text-[#292524]'"
+              >
+                {{ contact.avatar }}
               </div>
-              
-              <div class="flex-1 min-w-0">
-                <h3 class="font-label-md text-[16px] font-bold text-on-surface truncate">{{ activeChat.name }}</h3>
-                <p class="font-label-sm text-[11px] text-on-surface-variant truncate">
-                  Online
+              <span
+                v-if="contact.online"
+                class="absolute bottom-0 right-0 w-3 h-3 bg-[#A8551E] border-2 border-[#FDFCF9] rounded-full"
+              ></span>
+            </div>
+
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center justify-between gap-2 mb-0.5">
+                <h4 class="text-sm font-bold text-[#1C1917] truncate">{{ contact.name }}</h4>
+                <span class="text-[11px] text-[#78716C] shrink-0 tabular-nums">{{ contact.lastTime }}</span>
+              </div>
+              <div class="flex items-center justify-between gap-2">
+                <p class="text-xs text-[#57534E] truncate">{{ contact.lastMessage }}</p>
+                <span
+                  v-if="contact.unread > 0"
+                  class="px-1.5 py-0.5 rounded-full bg-[#A8551E] text-white text-[10px] font-bold shrink-0 tabular-nums"
+                >
+                  {{ contact.unread }}
+                </span>
+              </div>
+            </div>
+          </button>
+
+          <div v-if="!isLoadingContacts && filteredContacts.length === 0" class="p-8 text-center">
+            <p class="text-sm font-semibold text-[#57534E]">Tidak ada kontak ditemukan</p>
+            <p class="text-xs text-[#78716C] mt-1">Akun guru yang terdaftar akan tampil di sini.</p>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Active Chat Area -->
+      <section
+        class="flex-1 flex flex-col bg-[#F7F4ED]"
+        :class="{ 'hidden md:flex': !selectedUser }"
+      >
+        <template v-if="selectedUser">
+          <!-- Chat Header -->
+          <div class="px-5 py-3.5 bg-[#FDFCF9] border-b border-[#E7E2D8] flex items-center justify-between">
+            <div class="flex items-center gap-3 min-w-0">
+              <button
+                type="button"
+                @click="selectedUser = null"
+                class="md:hidden w-9 h-9 rounded-lg flex items-center justify-center text-[#57534E] hover:bg-[#ECE8DF]"
+                aria-label="Kembali ke daftar kontak"
+              >
+                <UiIcon name="arrow_back" :size="18" />
+              </button>
+              <div class="w-10 h-10 rounded-full bg-[#292524] text-[#FDFCF9] flex items-center justify-center font-bold text-sm shrink-0">
+                {{ selectedUser.avatar }}
+              </div>
+              <div class="min-w-0">
+                <h3 class="text-sm font-bold text-[#1C1917] leading-tight truncate">{{ selectedUser.name }}</h3>
+                <p class="text-xs flex items-center gap-1.5 mt-0.5" :class="selectedUser.online ? 'text-[#A8551E] font-medium' : 'text-[#78716C]'">
+                  <span v-if="selectedUser.online" class="w-1.5 h-1.5 rounded-full bg-[#A8551E]"></span>
+                  {{ selectedUser.online ? 'Online' : 'Offline' }}
                 </p>
               </div>
-              
-              <button class="p-2 text-on-surface-variant rounded-full hover:bg-surface-container" @click="fetchConversation(activeChat.id)">
-                <span class="material-symbols-outlined" :class="{'animate-spin': isFetchingChat}">sync</span>
+            </div>
+          </div>
+
+          <!-- Messages Feed -->
+          <div ref="messagesContainer" class="flex-1 p-5 overflow-y-auto space-y-3.5">
+            <div v-if="isLoadingMessages" class="py-10 flex justify-center">
+              <UiIcon name="progress_activity" :size="22" class="text-[#A8551E] animate-spin" />
+            </div>
+
+            <div v-else-if="messages.length === 0" class="py-12 text-center">
+              <div class="w-12 h-12 rounded-2xl bg-[#ECE8DF] text-[#78716C] flex items-center justify-center mx-auto mb-3">
+                <UiIcon name="mail" :size="22" />
+              </div>
+              <p class="text-sm font-semibold text-[#292524]">Belum ada percakapan</p>
+              <p class="text-xs text-[#78716C] mt-1">Mulai obrolan dengan {{ selectedUser.name }}.</p>
+            </div>
+
+            <div
+              v-else
+              v-for="msg in messages"
+              :key="msg.id"
+              class="flex flex-col"
+              :class="msg.isSender ? 'items-end' : 'items-start'"
+            >
+              <div
+                class="max-w-[78%] sm:max-w-[68%] px-4 py-2.5 text-sm leading-relaxed"
+                :class="msg.isSender
+                  ? 'bg-[#292524] text-[#FDFCF9] rounded-2xl rounded-br-sm'
+                  : 'bg-[#FDFCF9] text-[#1C1917] rounded-2xl rounded-bl-sm'"
+                :style="msg.isSender ? 'box-shadow: var(--shadow-btn-navy)' : 'box-shadow: var(--shadow-border)'"
+              >
+                <p class="whitespace-pre-line">{{ msg.text }}</p>
+              </div>
+              <span class="text-[10px] text-[#78716C] mt-1 px-1 tabular-nums">{{ msg.time }}</span>
+            </div>
+          </div>
+
+          <!-- Message Input -->
+          <div class="p-4 bg-[#FDFCF9] border-t border-[#E7E2D8]">
+            <form @submit.prevent="sendMessage" class="flex items-center gap-2.5">
+              <input
+                v-model="newMessage"
+                type="text"
+                placeholder="Ketik pesan untuk guru..."
+                class="ui-input flex-1 !min-h-[44px] bg-[#F7F4ED] border-transparent focus:bg-[#FDFCF9]"
+              />
+              <button
+                type="submit"
+                :disabled="!newMessage.trim() || isSending"
+                class="ui-btn-primary !w-11 !h-11 !p-0 shrink-0"
+                aria-label="Kirim pesan"
+              >
+                <UiIcon v-if="isSending" name="progress_activity" :size="18" class="animate-spin" />
+                <UiIcon v-else name="send" :size="18" />
               </button>
-            </div>
+            </form>
+          </div>
+        </template>
 
-            <!-- Chat Messages Area -->
-            <div class="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
-              <!-- Date Separator -->
-              <div class="flex justify-center my-2">
-                <span class="bg-surface-variant text-on-surface-variant px-3 py-1 rounded-full font-label-sm text-[11px]">Hari Ini</span>
-              </div>
-              
-              <div class="flex flex-col gap-4">
-                
-                <!-- Dynamic Messages -->
-                <div 
-                  v-for="(msg, idx) in currentMessages" 
-                  :key="msg.id || idx" 
-                  :class="['flex', msg.isSender ? 'justify-end' : 'justify-start']"
-                >
-                  <div 
-                    :class="[
-                      'max-w-[85%] md:max-w-[70%] rounded-2xl p-3 shadow-sm relative',
-                      msg.isSender 
-                        ? 'bg-primary text-on-primary rounded-tr-sm' 
-                        : 'bg-surface-container-high text-on-surface rounded-tl-sm'
-                    ]"
-                  >
-                    <p class="font-body-md text-[14px] leading-snug">{{ msg.text }}</p>
-                    <div 
-                      :class="[
-                        'text-[10px] text-right mt-1 font-medium flex items-center justify-end gap-1',
-                        msg.isSender ? 'text-on-primary/80' : 'text-on-surface-variant'
-                      ]"
-                    >
-                      {{ msg.time }}
-                      <span v-if="msg.isSender" class="material-symbols-outlined text-[14px]">done</span>
-                    </div>
-                  </div>
-                </div>
-
-              </div>
-              
-              <!-- Anchor for scrolling to bottom -->
-              <div ref="chatEndRef"></div>
-            </div>
-
-            <!-- Chat Input Footer -->
-            <div class="p-3 bg-surface-container-lowest border-t border-outline-variant/30 shrink-0">
-              <form @submit.prevent="sendMessage" class="flex items-center gap-2">
-                <button type="button" class="w-10 h-10 rounded-full text-on-surface-variant hover:bg-surface-container flex items-center justify-center shrink-0 transition-colors">
-                  <span class="material-symbols-outlined">add_circle</span>
-                </button>
-                
-                <input 
-                  v-model="newMessage" 
-                  type="text" 
-                  placeholder="Ketik pesan..." 
-                  class="flex-1 h-12 px-4 bg-surface rounded-full border border-outline-variant/50 focus:outline-none focus:border-primary text-body-md transition-colors"
-                >
-                
-                <button 
-                  type="submit" 
-                  :disabled="!newMessage.trim() || isSending"
-                  :class="[
-                    'w-12 h-12 rounded-full flex items-center justify-center shrink-0 transition-all',
-                    newMessage.trim() && !isSending ? 'bg-primary text-on-primary hover:bg-primary/90 shadow-md' : 'bg-surface-container-high text-on-surface-variant'
-                  ]"
-                >
-                  <span class="material-symbols-outlined text-[20px] ml-1">send</span>
-                </button>
-              </form>
-            </div>
-          </template>
+        <!-- Empty State -->
+        <div v-else class="flex-1 flex flex-col items-center justify-center p-8 text-center">
+          <div class="w-16 h-16 rounded-2xl bg-[#FDFCF9] text-[#A8551E] flex items-center justify-center mb-4" style="box-shadow: var(--shadow-border);">
+            <UiIcon name="forum" :size="28" />
+          </div>
+          <h3 class="text-lg font-bold text-[#1C1917]">Pusat Koordinasi Pesan</h3>
+          <p class="text-sm text-[#78716C] max-w-xs mt-1.5 leading-relaxed">
+            Pilih salah satu guru dari daftar kontak di sebelah kiri untuk membalas pertanyaan atau mengirim pemberitahuan.
+          </p>
         </div>
-
-      </div>
-    </main>
+      </section>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue';
+import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue';
 import axios from 'axios';
+import { notify } from '../../utils/toast';
 
-// Logika Responsif
-const windowWidth = ref(window.innerWidth);
-
-const updateWidth = () => {
-  windowWidth.value = window.innerWidth;
-};
-
-onMounted(() => {
-  window.addEventListener('resize', updateWidth);
-});
-
-onUnmounted(() => {
-  window.removeEventListener('resize', updateWidth);
-  stopPolling();
-});
-
-const isDesktop = computed(() => windowWidth.value >= 768);
-
-// Data Asli Database
-const chatList = ref([]);
 const searchQuery = ref('');
+const newMessage = ref('');
+const messagesContainer = ref(null);
 
-const filteredChatList = computed(() => {
-  if (!searchQuery.value) return chatList.value;
-  return chatList.value.filter(c => c.name.toLowerCase().includes(searchQuery.value.toLowerCase()));
+const contacts = ref([]);
+const selectedUser = ref(null);
+const messages = ref([]);
+
+const isLoadingContacts = ref(true);
+const isLoadingMessages = ref(false);
+const isSending = ref(false);
+let pollInterval = null;
+
+const filteredContacts = computed(() => {
+  const q = searchQuery.value.toLowerCase();
+  if (!q) return contacts.value;
+  return contacts.value.filter(
+    (c) => c.name.toLowerCase().includes(q) || (c.lastMessage && c.lastMessage.toLowerCase().includes(q))
+  );
 });
 
-let pollingInterval = null;
-
-const fetchChatList = async () => {
+const fetchContacts = async () => {
   try {
     const res = await axios.get('/messages/chat-list');
-    chatList.value = res.data;
-  } catch (error) {
-    console.error("Gagal mengambil chat list", error);
-  }
-};
-
-onMounted(() => {
-  fetchChatList();
-  startPolling();
-});
-
-const startPolling = () => {
-  if (pollingInterval) clearInterval(pollingInterval);
-  pollingInterval = setInterval(() => {
-    fetchChatList();
-    if (activeChat.value) {
-      fetchConversation(activeChat.value.id, false);
+    contacts.value = res.data;
+    if (!selectedUser.value && contacts.value.length > 0 && window.innerWidth >= 768) {
+      selectContact(contacts.value[0]);
     }
-  }, 10000); // 10 seconds
-};
-
-const stopPolling = () => {
-  if (pollingInterval) clearInterval(pollingInterval);
-};
-
-const activeChat = ref(null);
-const newMessage = ref('');
-const currentMessages = ref([]);
-const chatEndRef = ref(null);
-const isSending = ref(false);
-const isFetchingChat = ref(false);
-
-const getInitials = (name) => {
-  if (!name) return 'U';
-  const parts = name.split(' ').filter(n => !n.includes('(') && !n.includes(')'));
-  if (parts.length >= 2) {
-    return (parts[0][0] + parts[1][0]).toUpperCase();
+  } catch (err) {
+    console.error('Gagal memuat daftar kontak', err);
+    notify('Gagal memuat daftar kontak guru.', 'error');
+  } finally {
+    isLoadingContacts.value = false;
   }
-  return name.substring(0, 2).toUpperCase();
 };
 
-const openChat = async (chat) => {
-  activeChat.value = chat;
-  chat.unread = 0; // mark as read locally
-  await fetchConversation(chat.id, true);
-};
-
-const closeChat = () => {
-  activeChat.value = null;
-};
-
-const fetchConversation = async (userId, shouldScroll = false) => {
-  isFetchingChat.value = true;
+const fetchMessages = async (userId, silent = false) => {
+  if (!silent) isLoadingMessages.value = true;
   try {
     const res = await axios.get(`/messages/conversation/${userId}`);
-    currentMessages.value = res.data;
-    if (shouldScroll) {
-      scrollToBottom();
+    const prevCount = messages.value.length;
+    messages.value = res.data;
+
+    if (!silent || messages.value.length !== prevCount) {
+      await scrollToBottom();
     }
-  } catch (error) {
-    console.error(error);
+  } catch (err) {
+    console.error('Gagal memuat percakapan', err);
+    if (!silent) notify('Gagal memuat percakapan.', 'error');
   } finally {
-    isFetchingChat.value = false;
+    isLoadingMessages.value = false;
   }
+};
+
+const selectContact = async (contact) => {
+  selectedUser.value = contact;
+  contact.unread = 0;
+  await fetchMessages(contact.id);
 };
 
 const scrollToBottom = async () => {
   await nextTick();
-  if (chatEndRef.value) {
-    chatEndRef.value.scrollIntoView({ behavior: 'smooth' });
+  if (messagesContainer.value) {
+    messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight;
   }
 };
 
 const sendMessage = async () => {
-  if (!newMessage.value.trim() || !activeChat.value) return;
-  
-  isSending.value = true;
-  const msgText = newMessage.value.trim();
+  if (!newMessage.value.trim() || !selectedUser.value || isSending.value) return;
+
+  const text = newMessage.value.trim();
   newMessage.value = '';
-  
+  isSending.value = true;
+
   try {
     const res = await axios.post('/messages/send', {
-      receiver_id: activeChat.value.id,
-      message: msgText
+      receiver_id: selectedUser.value.id,
+      message: text,
     });
-    
-    currentMessages.value.push(res.data.data);
-    
-    // Update chat list last message locally
-    const chatInList = chatList.value.find(c => c.id === activeChat.value.id);
-    if (chatInList) {
-      chatInList.lastMessage = res.data.data.text;
-      chatInList.lastTime = res.data.data.time;
-    }
-    
-    scrollToBottom();
-  } catch (error) {
-    console.error(error);
-    alert('Gagal mengirim pesan');
-    newMessage.value = msgText; // restore
+
+    const msgObj = res.data.data;
+    messages.value.push(msgObj);
+    selectedUser.value.lastMessage = text;
+    selectedUser.value.lastTime = msgObj.time;
+
+    await scrollToBottom();
+  } catch (err) {
+    console.error('Gagal kirim pesan', err);
+    newMessage.value = text;
+    notify('Gagal mengirim pesan.', 'error');
   } finally {
     isSending.value = false;
   }
 };
+
+const startPolling = () => {
+  pollInterval = setInterval(() => {
+    if (selectedUser.value) {
+      fetchMessages(selectedUser.value.id, true);
+    }
+    axios
+      .get('/messages/chat-list')
+      .then((res) => {
+        contacts.value = res.data;
+        if (selectedUser.value) {
+          const updated = contacts.value.find((c) => c.id === selectedUser.value.id);
+          if (updated) updated.unread = 0;
+        }
+      })
+      .catch(() => {});
+  }, 10000);
+};
+
+onMounted(() => {
+  fetchContacts();
+  startPolling();
+});
+
+onUnmounted(() => {
+  if (pollInterval) clearInterval(pollInterval);
+});
 </script>

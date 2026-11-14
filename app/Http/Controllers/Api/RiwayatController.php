@@ -10,6 +10,10 @@ class RiwayatController extends Controller
 {
     public function index(Request $request)
     {
+        if ($request->user()?->role !== 'admin') {
+            abort(403, 'Hanya Admin yang dapat mengakses riwayat aktivitas.');
+        }
+
         $perPage = (int) $request->query('per_page', 0);
         $query = LogAktivitas::orderBy('created_at', 'desc');
 
@@ -28,8 +32,12 @@ class RiwayatController extends Controller
         return response()->json($query->get());
     }
 
-    public function clear()
+    public function clear(Request $request)
     {
+        if ($request->user()?->role !== 'admin') {
+            abort(403, 'Hanya Admin yang dapat menghapus riwayat aktivitas.');
+        }
+
         LogAktivitas::truncate();
         return response()->json(['message' => 'Riwayat berhasil dihapus']);
     }

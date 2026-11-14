@@ -1,3 +1,325 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root {
+  --surface-canvas: #F5F3EE;
+  --surface-card: #FDFCF9;
+  --surface-inset: #F7F4ED;
+  --shadow-border:
+    0px 0px 0px 1px oklch(0.22 0.015 65 / 0.08),
+    0px 1px 2px -1px oklch(0.22 0.015 65 / 0.05),
+    0px 2px 4px 0px oklch(0.22 0.015 65 / 0.03);
+  --shadow-border-hover:
+    0px 0px 0px 1px oklch(0.22 0.015 65 / 0.13),
+    0px 2px 4px -1px oklch(0.22 0.015 65 / 0.07),
+    0px 4px 10px 0px oklch(0.22 0.015 65 / 0.05);
+  --shadow-elevated:
+    0px 0px 0px 1px oklch(0.22 0.015 65 / 0.09),
+    0px 6px 16px -4px oklch(0.22 0.015 65 / 0.09),
+    0px 14px 28px -6px oklch(0.22 0.015 65 / 0.06);
+  --shadow-navy-card:
+    0px 0px 0px 1px oklch(0.22 0.015 55 / 0.45),
+    0px 8px 20px -4px oklch(0.2 0.02 55 / 0.24),
+    0px 2px 6px -1px oklch(0.2 0.02 55 / 0.16);
+  --shadow-btn-primary:
+    inset 0px 1px 0px 0px oklch(1 0 0 / 0.2),
+    0px 0px 0px 1px oklch(0.48 0.13 42 / 0.92),
+    0px 1px 3px 0px oklch(0.32 0.1 42 / 0.22);
+  --shadow-btn-navy:
+    inset 0px 1px 0px 0px oklch(1 0 0 / 0.14),
+    0px 0px 0px 1px oklch(0.22 0.015 55 / 0.95),
+    0px 1px 3px 0px oklch(0.18 0.015 55 / 0.22);
+  --shadow-btn-danger:
+    0px 0px 0px 1px oklch(0.5 0.18 12 / 0.2),
+    0px 1px 2px -1px oklch(0 0 0 / 0.04);
+  --image-outline: oklch(0 0 0 / 0.1);
+}
+
+@layer base {
+  html {
+    font-family: 'Onest', ui-sans-serif, system-ui, -apple-system, sans-serif;
+    background-color: var(--surface-canvas);
+    color: #1C1917;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  button,
+  a,
+  [role="button"] {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+
+  :focus-visible {
+    outline: 2px solid #A8551E;
+    outline-offset: 2px;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(28, 25, 23, 0.16);
+    border-radius: 9999px;
+  }
+}
+
+@media (hover: hover) {
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(28, 25, 23, 0.28);
+  }
+}
+
+/* Staged first-load entrance per better-ui/enter-exit.md */
+@keyframes ui-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes ui-fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+    filter: blur(4px);
+  }
+}
+
+.ui-stagger {
+  animation: ui-fade-in 300ms ease-out both;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .ui-stagger {
+    animation-name: ui-fade-in-up;
+  }
+}
+
+.ui-stagger-1 { animation-delay: 0ms; }
+.ui-stagger-2 { animation-delay: 100ms; }
+.ui-stagger-3 { animation-delay: 200ms; }
+.ui-stagger-4 { animation-delay: 300ms; }
+
+/* Toast TransitionGroup states per better-ui/enter-exit.md */
+.ui-toast-enter-active {
+  transition: opacity 300ms ease-out, transform 300ms ease-out, filter 300ms ease-out;
+}
+.ui-toast-leave-active {
+  transition: opacity 150ms ease-out, transform 150ms ease-out, filter 150ms ease-out;
+}
+.ui-toast-enter-from {
+  opacity: 0;
+  transform: translateY(12px);
+  filter: blur(4px);
+}
+.ui-toast-leave-to {
+  opacity: 0;
+  transform: translateY(-12px);
+  filter: blur(4px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-toast-enter-active {
+    transition: opacity 200ms ease-out;
+  }
+  .ui-toast-leave-active {
+    transition: opacity 150ms ease-out;
+  }
+  .ui-toast-enter-from,
+  .ui-toast-leave-to {
+    transform: none;
+    filter: none;
+  }
+}
+
+/* Contextual icon cross-fade per better-ui/icon-transitions.md */
+.ui-icon-swap {
+  display: grid;
+  place-items: center;
+}
+.ui-icon-swap > * {
+  grid-area: 1 / 1;
+  transition:
+    opacity 300ms cubic-bezier(0.2, 0, 0, 1),
+    transform 300ms cubic-bezier(0.2, 0, 0, 1),
+    filter 300ms cubic-bezier(0.2, 0, 0, 1);
+}
+.ui-icon-swap-shown {
+  opacity: 1;
+  transform: scale(1);
+  filter: blur(0px);
+}
+.ui-icon-swap-hidden {
+  opacity: 0;
+  transform: scale(0.25);
+  filter: blur(4px);
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-icon-swap-hidden {
+    transform: scale(1);
+    filter: blur(0px);
+  }
+}
+
+@layer components {
+  .ui-page {
+    @apply max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8;
+  }
+
+  /* Shadow-ring elevated card with forced-colors transparent border */
+  .ui-panel {
+    background-color: #FDFCF9;
+    border: 1px solid transparent;
+    border-radius: 16px;
+    box-shadow: var(--shadow-border);
+    transition-property: box-shadow, background-color;
+    transition-duration: 150ms;
+    transition-timing-function: ease-out;
+  }
+
+  .ui-panel-interactive:hover {
+    box-shadow: var(--shadow-border-hover);
+  }
+
+  .ui-panel-padded {
+    @apply ui-panel p-5 sm:p-6;
+  }
+
+  .ui-panel-elevated {
+    background-color: #FDFCF9;
+    border: 1px solid transparent;
+    border-radius: 20px;
+    box-shadow: var(--shadow-elevated);
+  }
+
+  /* Concentric segmented switcher: 4px padding + 10px inner radius = 14px outer radius */
+  .ui-segmented {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px;
+    border-radius: 14px;
+    background-color: #ECE8DF;
+    border: 1px solid transparent;
+    box-shadow: inset 0px 1px 2px 0px oklch(0.22 0.015 65 / 0.06), 0px 0px 0px 1px oklch(0.22 0.015 65 / 0.06);
+  }
+
+  .ui-segmented-item {
+    @apply min-h-[38px] px-3.5 py-1.5 text-sm font-semibold inline-flex items-center justify-center gap-2;
+    border-radius: 10px;
+    border: 1px solid transparent;
+    transition-property: transform, background-color, color, box-shadow;
+    transition-duration: 150ms;
+    transition-timing-function: ease-out;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .ui-segmented-item:not(:disabled):active {
+    transform: scale(0.96);
+  }
+
+  .ui-segmented-item-active {
+    background-color: #FDFCF9;
+    color: #1C1917;
+    box-shadow: var(--shadow-border);
+  }
+
+  .ui-segmented-item-idle {
+    color: #57534E;
+  }
+
+  .ui-input {
+    @apply w-full min-h-[44px] px-3.5 py-2.5 bg-[#FDFCF9] border border-[#D6D0C4] text-sm text-[#1C1917] placeholder:text-[#A8A29E] focus:outline-none focus:border-[#A8551E] focus:ring-2 focus:ring-[#A8551E]/15;
+    border-radius: 10px;
+    box-shadow: inset 0px 1px 2px 0px oklch(0.22 0.015 65 / 0.03);
+    transition-property: border-color, box-shadow;
+    transition-duration: 150ms;
+    transition-timing-function: ease-out;
+  }
+
+  .ui-select {
+    @apply ui-input appearance-none pr-10 cursor-pointer;
+  }
+
+  .ui-btn-base {
+    @apply min-h-[44px] px-4 py-2.5 font-semibold text-sm inline-flex items-center justify-center gap-2 select-none;
+    border-radius: 10px;
+    border: 1px solid transparent;
+    -webkit-tap-highlight-color: transparent;
+    transition-property: transform, background-color, color, box-shadow, opacity;
+    transition-duration: 150ms;
+    transition-timing-function: ease-out;
+  }
+
+  .ui-btn-base:not(:disabled):active {
+    transform: scale(0.96);
+  }
+
+  .ui-btn-base:disabled {
+    opacity: 0.52;
+    cursor: not-allowed;
+  }
+
+  .ui-btn-primary {
+    @apply ui-btn-base bg-[#A8551E] text-white hover:bg-[#8D4415];
+    box-shadow: var(--shadow-btn-primary);
+  }
+
+  .ui-btn-navy {
+    @apply ui-btn-base bg-[#292524] text-white hover:bg-[#1C1917];
+    box-shadow: var(--shadow-btn-navy);
+  }
+
+  .ui-btn-secondary {
+    @apply ui-btn-base bg-[#FDFCF9] text-[#292524] hover:bg-[#F7F4ED];
+    box-shadow: var(--shadow-border);
+  }
+
+  .ui-btn-secondary:hover:not(:disabled) {
+    box-shadow: var(--shadow-border-hover);
+  }
+
+  .ui-btn-danger {
+    @apply ui-btn-base bg-[#FDF2F4] text-[#9F1239] hover:bg-[#FCE4E9];
+    box-shadow: var(--shadow-btn-danger);
+  }
+
+  /* Optical alignment nudges */
+  .ui-btn-icon-l {
+    @apply ps-3.5 pe-4;
+  }
+  .ui-btn-icon-r {
+    @apply ps-4 pe-3.5;
+  }
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-stagger {
+    animation: ui-fade-in 200ms ease-out both;
+    animation-delay: 0ms !important;
+  }
+  .ui-btn-base:not(:disabled):active,
+  .ui-segmented-item:not(:disabled):active {
+    transform: none;
+  }
+}

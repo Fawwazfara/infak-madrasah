@@ -1,363 +1,239 @@
 <template>
-  <div class="flex-1 flex flex-col h-full bg-background relative">
-    
-    <!-- Desktop Layout: Two-column on lg+, single column on mobile -->
-    <main class="w-full h-full flex flex-col relative lg:max-w-[1200px] lg:mx-auto lg:shadow-2xl">
-      
-      <!-- TopAppBar -->
-      <header class="sticky top-0 left-0 w-full z-30 flex items-center px-container-margin h-16 bg-surface shadow-sm border-b border-surface-variant flex-none lg:px-lg">
-        <button @click="$router.back()" aria-label="Go back" class="p-2 -ml-2 rounded-full hover:bg-primary-container/20 text-primary transition-colors active:scale-95 lg:-ml-0">
-          <span class="material-symbols-outlined font-normal">arrow_back</span>
-        </button>
-        <h1 class="ml-4 font-headline-md text-headline-md text-primary font-bold tracking-tight">Catat Infak</h1>
-      </header>
+  <div class="ui-page flex flex-col gap-6">
+    <!-- Header & Concentric Mode Switch -->
+    <div class="ui-stagger ui-stagger-1 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+      <div>
+        <h2 class="text-2xl sm:text-[26px] font-bold text-[#1C1917] tracking-tight">Catat Infak Siswa</h2>
+        <p class="text-sm text-[#57534E] mt-1">Input penerimaan infak tunai untuk satu siswa maupun massal satu kelas.</p>
+      </div>
 
-      <!-- Scrollable Body -->
-      <div class="flex-1 overflow-y-auto px-container-margin py-lg space-y-lg lg:px-lg lg:py-xl lg:grid lg:grid-cols-[1fr_380px] lg:gap-xl lg:items-start">
-        
-        <!-- LEFT COLUMN: Form Sections -->
-        <div class="flex flex-col gap-lg lg:pr-4 lg:sticky lg:top-20">
-          
-          <form @submit.prevent="saveTransaction" class="flex flex-col gap-lg pb-24 lg:pb-0">
-            
-            <!-- Toggle Mode Input -->
-            <div class="bg-surface-container rounded-full p-1 border border-outline-variant/50 flex">
-              <button 
+      <div class="ui-segmented self-start sm:self-auto">
+        <button
+          type="button"
+          @click="setInputMode('satuan')"
+          :class="['ui-segmented-item text-xs sm:text-sm', inputMode === 'satuan' ? 'ui-segmented-item-active' : 'ui-segmented-item-idle']"
+        >
+          Mode Satuan
+        </button>
+        <button
+          type="button"
+          @click="setInputMode('massal')"
+          :class="['ui-segmented-item text-xs sm:text-sm', inputMode === 'massal' ? 'ui-segmented-item-active' : 'ui-segmented-item-idle']"
+        >
+          Mode Massal
+        </button>
+      </div>
+    </div>
+
+    <div
+      v-if="isSuccess"
+      role="status"
+      class="rounded-[14px] border border-transparent bg-[#F9EFE7] shadow-[0_0_0_1px_oklch(0.55_0.13_42_/_0.22)] p-4 flex items-center gap-3 text-[#7C3A10]"
+    >
+      <UiIcon name="check_circle" :size="20" :weight="600" filled class="text-[#A8551E]" />
+      <p class="text-sm font-semibold">Transaksi infak berhasil dicatat dan ditambahkan ke antrean konfirmasi WhatsApp.</p>
+    </div>
+
+    <div class="ui-stagger ui-stagger-2 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+      <!-- Form Steps -->
+      <div class="lg:col-span-8 flex flex-col gap-6">
+        <section class="ui-panel-padded space-y-5">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div class="flex flex-col gap-1.5">
+              <label class="text-xs font-semibold text-[#44403C]" for="infakKelas">Pilih Kelas</label>
+              <div class="relative">
+                <select id="infakKelas" v-model="form.kelas_id" class="ui-select">
+                  <option value="" disabled>-- Pilih Kelas --</option>
+                  <option v-for="k in kelasi" :key="k.id" :value="k.id">{{ k.nama_kelas }}</option>
+                </select>
+                <UiIcon name="expand_more" :size="17" :weight="600" class="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-[#78716C]" />
+              </div>
+            </div>
+            <div class="flex flex-col gap-1.5">
+              <label class="text-xs font-semibold text-[#44403C]" for="infakTanggal">Tanggal Terima</label>
+              <input id="infakTanggal" v-model="form.tanggal" type="date" class="ui-input">
+            </div>
+          </div>
+
+          <!-- Month Grid -->
+          <div class="pt-4 border-t border-black/[0.06]">
+            <label class="block text-sm font-bold text-[#1C1917] mb-3">
+              {{ inputMode === 'satuan' ? 'Pilih Bulan Dibayar' : 'Pilih Bulan Tagihan Massal' }}
+            </label>
+            <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2.5">
+              <button
+                v-for="m in monthsList"
+                :key="m"
                 type="button"
-                @click="setInputMode('satuan')"
+                :disabled="inputMode === 'satuan' && paidMonths.includes(m)"
+                @click="inputMode === 'satuan' ? toggleMonth(m) : toggleMonthMassal(m)"
                 :class="[
-                  'flex-1 h-12 rounded-full font-label-md transition-colors',
-                  inputMode === 'satuan' ? 'bg-primary text-white shadow-sm font-bold' : 'text-on-surface-variant hover:bg-surface-container-high'
+                  'min-h-[46px] px-3 rounded-[10px] border border-transparent text-xs font-bold transition-[background-color,color,box-shadow,transform] duration-150 ease-out',
+                  inputMode === 'satuan' && paidMonths.includes(m)
+                    ? 'bg-[#F9EFE7] shadow-[inset_0_0_0_1px_oklch(0.55_0.13_42_/_0.22)] text-[#A8551E] opacity-70 cursor-not-allowed'
+                    : form.selectedMonths.includes(m)
+                      ? 'bg-[#292524] text-[#FDFCF9] shadow-[var(--shadow-btn-navy)] enabled:active:scale-[0.96]'
+                      : 'bg-[#F7F4ED] text-[#1C1917] shadow-[var(--shadow-border)] hover:bg-[#FDFCF9] hover:shadow-[var(--shadow-border-hover)] enabled:active:scale-[0.96]'
                 ]"
               >
-                Input Satuan
+                {{ m }}
               </button>
-              <button 
+            </div>
+          </div>
+
+          <!-- Student Selection -->
+          <div class="pt-4 border-t border-black/[0.06]" v-if="form.kelas_id">
+            <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+              <label class="text-sm font-bold text-[#1C1917]" for="siswaSearch">
+                {{ inputMode === 'satuan' ? 'Pilih Siswa' : 'Pilih Siswa Belum Lunas' }}
+              </label>
+              <div v-if="inputMode === 'massal' && filteredStudents.length > 0" class="flex gap-2">
+                <button type="button" @click="selectAllSiswa" class="text-xs font-semibold text-[#A8551E] hover:underline">Pilih Semua</button>
+                <span class="text-[#D6D0C4]">|</span>
+                <button type="button" @click="deselectAllSiswa" class="text-xs font-semibold text-[#78716C] hover:underline">Kosongkan</button>
+              </div>
+            </div>
+
+            <div class="relative mb-3">
+              <UiIcon name="search" :size="17" :weight="500" class="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#78716C]" />
+              <input id="siswaSearch" v-model="searchQuery" type="text" placeholder="Cari nama siswa..." class="ui-input pl-10">
+            </div>
+
+            <div v-if="isFetchingStudents" class="p-6 text-center text-sm text-[#78716C]">Memuat daftar siswa...</div>
+            <div
+              v-else-if="filteredStudents.length === 0"
+              class="p-6 text-center rounded-[12px] bg-[#F7F4ED] shadow-[inset_0_1px_2px_0_oklch(0.22_0.015_65_/_0.05),0_0_0_1px_oklch(0.22_0.015_65_/_0.07)] text-sm text-[#78716C]"
+            >
+              {{ inputMode === 'massal' && form.selectedMonths.length === 0 ? 'Pilih minimal satu bulan untuk menampilkan siswa yang belum lunas.' : 'Tidak ada siswa yang sesuai.' }}
+            </div>
+
+            <div v-else-if="inputMode === 'satuan'" class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-72 overflow-y-auto overscroll-contain pr-1">
+              <button
+                v-for="s in filteredStudents"
+                :key="s.id"
                 type="button"
-                @click="setInputMode('massal')"
+                @click="form.siswa_id = s.id"
                 :class="[
-                  'flex-1 h-12 rounded-full font-label-md transition-colors',
-                  inputMode === 'massal' ? 'bg-primary text-white shadow-sm font-bold' : 'text-on-surface-variant hover:bg-surface-container-high'
+                  'min-h-[54px] p-3.5 rounded-[11px] text-left transition-[background-color,border-color,box-shadow,transform] duration-150 ease-out active:scale-[0.97] flex items-center gap-3',
+                  form.siswa_id === s.id
+                    ? 'bg-[#F9EFE7] border border-[#A8551E] shadow-[0_0_0_2px_oklch(0.55_0.13_42_/_0.14)]'
+                    : 'bg-[#F7F4ED] border border-transparent shadow-[var(--shadow-border)] hover:bg-[#FDFCF9] hover:shadow-[var(--shadow-border-hover)]'
                 ]"
               >
-                Input Massal
+                <div class="w-9 h-9 rounded-[9px] bg-[#292524] text-[#FDFCF9] text-xs font-bold flex items-center justify-center shrink-0">
+                  {{ getInitials(s.fullName) }}
+                </div>
+                <span class="text-sm font-semibold text-[#1C1917] truncate">{{ s.fullName }}</span>
               </button>
             </div>
 
-            <!-- ============================== ALUR SATUAN ============================== -->
-            <template v-if="inputMode === 'satuan'">
-              
-              <section class="bg-surface-container-lowest rounded-2xl p-md shadow-sm border border-surface-variant/50 flex flex-col gap-md">
-                <div class="flex flex-col gap-xs">
-                  <label class="font-label-md text-label-md text-on-surface" for="kelasSatuan">Pilih Kelas</label>
-                  <div class="relative">
-                    <select v-model="form.kelas_id" required class="w-full h-12 rounded-xl border-outline-variant text-on-surface bg-surface-bright focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/20 appearance-none pl-4 pr-10 font-body-md text-body-md transition-all" id="kelasSatuan">
-                      <option value="" disabled>Pilih Kelas</option>
-                      <option v-for="k in kelasi" :key="k.id" :value="k.id">{{ k.nama_kelas }}</option>
-                    </select>
-                    <span class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-outline pointer-events-none">expand_more</span>
-                  </div>
-                </div>
-                
-                <div class="flex flex-col gap-xs">
-                  <label class="font-label-md text-label-md text-on-surface" for="siswaSatuan">Pilih Siswa</label>
-                  <div class="relative">
-                    <select v-model="form.siswa_id" required class="w-full h-12 rounded-xl border-outline-variant text-on-surface bg-surface-bright focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/20 appearance-none pl-4 pr-10 font-body-md text-body-md transition-all" id="siswaSatuan" :disabled="!form.kelas_id || isFetchingStudents">
-                      <option value="" disabled>{{ isFetchingStudents ? 'Memuat siswa...' : 'Pilih Siswa' }}</option>
-                      <option v-for="s in students" :key="s.id" :value="s.id">{{ s.fullName }}</option>
-                    </select>
-                    <span class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-outline pointer-events-none">expand_more</span>
-                  </div>
-                </div>
-              </section>
+            <div v-else class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-72 overflow-y-auto overscroll-contain pr-1">
+              <label
+                v-for="s in filteredStudents"
+                :key="s.id"
+                class="min-h-[50px] p-3 rounded-[11px] cursor-pointer flex items-center gap-3 transition-[background-color,border-color,box-shadow] duration-150 ease-out"
+                :class="form.siswa_ids.includes(s.id)
+                  ? 'bg-[#F9EFE7] border border-[#A8551E] shadow-[0_0_0_2px_oklch(0.55_0.13_42_/_0.14)]'
+                  : 'bg-[#F7F4ED] border border-transparent shadow-[var(--shadow-border)] hover:bg-[#FDFCF9] hover:shadow-[var(--shadow-border-hover)]'"
+              >
+                <input type="checkbox" :value="s.id" v-model="form.siswa_ids" class="w-4 h-4 rounded border-[#D6D0C4] text-[#A8551E] focus:ring-[#A8551E]">
+                <span class="text-sm font-semibold text-[#1C1917] truncate">{{ s.fullName }}</span>
+              </label>
+            </div>
+          </div>
 
-              <section class="bg-surface-container-lowest rounded-2xl p-md shadow-sm border border-surface-variant/50 flex flex-col gap-md" v-if="form.siswa_id">
-                <h2 class="font-label-md text-label-md text-on-surface">Bulan Belum Dibayar</h2>
-                <div class="grid grid-cols-3 lg:grid-cols-6 gap-sm">
-                  <button 
-                    v-for="month in unpaidMonthsForSatuan" 
-                    :key="month"
-                    type="button"
-                    @click="toggleMonth(month)"
-                    :class="[
-                      'h-12 lg:h-14 rounded-lg font-label-md text-label-md active:scale-95 transition-transform flex items-center justify-center',
-                      form.selectedMonths.includes(month) 
-                        ? 'bg-primary-container text-white shadow-sm gap-1' 
-                        : 'bg-surface-bright text-on-surface-variant border border-outline-variant/30 hover:bg-surface-variant'
-                    ]"
-                  >
-                    <span v-if="form.selectedMonths.includes(month)" class="material-symbols-outlined text-[16px] fill">check</span>
-                    {{ month }}
-                  </button>
-                </div>
-                <div v-if="unpaidMonthsForSatuan.length === 0" class="text-center p-3 text-secondary font-label-md">
-                  🎉 Semua bulan sudah lunas!
-                </div>
-              </section>
+          <!-- Nominal -->
+          <div class="pt-4 border-t border-black/[0.06]">
+            <label class="block text-sm font-bold text-[#1C1917] mb-2.5" for="nominalInput">Nominal per Bulan (Rp)</label>
+            <div class="flex flex-wrap gap-2 mb-3">
+              <button
+                v-for="preset in [25000, 30000, 40000, 50000]"
+                :key="preset"
+                type="button"
+                @click="form.nominal = preset"
+                :class="[
+                  'min-h-[40px] px-4 rounded-[10px] border border-transparent text-xs font-mono font-bold tabular-nums transition-[background-color,color,box-shadow,transform] duration-150 ease-out active:scale-[0.96]',
+                  Number(form.nominal) === preset
+                    ? 'bg-[#292524] text-[#FDFCF9] shadow-[var(--shadow-btn-navy)]'
+                    : 'bg-[#F7F4ED] text-[#1C1917] shadow-[var(--shadow-border)] hover:bg-[#FDFCF9] hover:shadow-[var(--shadow-border-hover)]'
+                ]"
+              >
+                Rp {{ formatRupiah(preset) }}
+              </button>
+            </div>
+            <input id="nominalInput" v-model.number="form.nominal" type="number" min="1000" step="1000" class="ui-input max-w-xs font-mono font-bold tabular-nums">
+          </div>
+        </section>
+      </div>
 
-            </template>
+      <!-- Summary Panel -->
+      <aside class="lg:col-span-4 ui-panel-padded lg:sticky lg:top-24 flex flex-col gap-5">
+        <h3 class="text-base font-bold text-[#1C1917] pb-3 border-b border-black/[0.06]">Ringkasan Input</h3>
 
-            <!-- ============================== ALUR MASSAL ============================== -->
-            <template v-else>
-              
-              <section class="bg-surface-container-lowest rounded-2xl p-md shadow-sm border border-surface-variant/50 flex flex-col gap-md">
-                <h2 class="font-label-md text-label-md text-on-surface">Pilih Bulan (bisa multiple)</h2>
-                <div class="grid grid-cols-3 lg:grid-cols-6 gap-sm">
-                  <button 
-                    v-for="month in monthsList" 
-                    :key="month"
-                    type="button"
-                    @click="toggleMonthMassal(month)"
-                    :class="[
-                      'h-12 lg:h-14 rounded-lg font-label-md text-label-md active:scale-95 transition-transform flex items-center justify-center',
-                      form.selectedMonths.includes(month) 
-                        ? 'bg-primary-container text-white shadow-sm gap-1' 
-                        : 'bg-surface-bright text-on-surface-variant border border-outline-variant/30 hover:bg-surface-variant'
-                    ]"
-                  >
-                    <span v-if="form.selectedMonths.includes(month)" class="material-symbols-outlined text-[16px] fill">check</span>
-                    {{ month }}
-                  </button>
-                </div>
-              </section>
-
-              <section class="bg-surface-container-lowest rounded-2xl p-md shadow-sm border border-surface-variant/50 flex flex-col gap-md" v-if="form.selectedMonths.length > 0">
-                <div class="flex flex-col gap-xs">
-                  <label class="font-label-md text-label-md text-on-surface" for="kelasMassal">Pilih Kelas</label>
-                  <div class="relative">
-                    <select v-model="form.kelas_id" required class="w-full h-12 rounded-xl border-outline-variant text-on-surface bg-surface-bright focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/20 appearance-none pl-4 pr-10 font-body-md text-body-md transition-all" id="kelasMassal">
-                      <option value="" disabled>Pilih Kelas</option>
-                      <option v-for="k in kelasi" :key="k.id" :value="k.id">{{ k.nama_kelas }}</option>
-                    </select>
-                    <span class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-outline pointer-events-none">expand_more</span>
-                  </div>
-                </div>
-                
-                <div class="flex flex-col gap-3" v-if="form.kelas_id">
-                  <div class="bg-surface-bright border border-outline-variant/50 rounded-xl overflow-hidden flex flex-col">
-                    <div class="flex justify-between items-center p-3 border-b border-outline-variant/30 bg-surface-container-lowest">
-                      <span class="font-label-sm text-on-surface-variant">Siswa Belum Lunas ({{ form.selectedMonths.join(', ') }})</span>
-                      <div class="flex gap-3">
-                        <button type="button" @click="selectAllSiswa" class="font-label-sm text-primary hover:underline" v-if="students.length > 0">Pilih Semua</button>
-                        <button type="button" @click="deselectAllSiswa" class="font-label-sm text-error hover:underline" v-if="students.length > 0">Batal Semua</button>
-                      </div>
-                    </div>
-                    
-                    <div class="p-2 border-b border-outline-variant/30 bg-surface-container-lowest" v-if="students.length > 0">
-                      <div class="relative">
-                        <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline-variant text-[20px] pointer-events-none">search</span>
-                        <input v-model="searchQuery" type="text" placeholder="Cari nama siswa..." class="w-full h-10 pl-10 pr-4 rounded-lg border border-outline-variant bg-surface-bright focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 font-body-sm text-body-sm">
-                      </div>
-                    </div>
-                    
-                    <div class="max-h-[400px] lg:max-h-[500px] overflow-y-auto flex flex-col p-2 gap-1 relative min-h-[150px]">
-                      <div v-if="isFetchingStudents" class="absolute inset-0 flex items-center justify-center bg-white/50 z-10">
-                        <span class="material-symbols-outlined animate-spin text-primary text-3xl">sync</span>
-                      </div>
-
-                      <label v-for="s in filteredStudents" :key="s.id" class="flex items-center gap-3 p-3 rounded-lg hover:bg-surface-container-lowest cursor-pointer transition-colors" :class="{'bg-primary/5': form.siswa_ids.includes(s.id)}">
-                        <div class="relative flex items-center justify-center w-6 h-6 shrink-0">
-                          <input type="checkbox" :value="s.id" v-model="form.siswa_ids" class="peer appearance-none w-6 h-6 border-2 border-outline rounded-md checked:bg-primary checked:border-primary transition-all">
-                          <span class="material-symbols-outlined absolute text-white text-[18px] pointer-events-none opacity-0 peer-checked:opacity-100 transition-opacity">check</span>
-                        </div>
-                        <div class="w-10 h-10 rounded-full bg-primary-container text-on-primary-container flex items-center justify-center font-label-md shrink-0 uppercase">
-                          {{ getInitials(s.fullName) }}
-                        </div>
-                        <div class="flex flex-col min-w-0">
-                          <span class="font-label-md text-on-surface truncate">{{ s.fullName }}</span>
-                          <span class="font-body-sm text-on-surface-variant truncate">NISN: {{ s.nis }}</span>
-                        </div>
-                      </label>
-                      <div v-if="!isFetchingStudents && students.length === 0" class="p-4 text-center text-secondary font-body-sm flex flex-col items-center gap-2">
-                        <span class="material-symbols-outlined text-4xl">check_circle</span>
-                        Semua siswa di kelas ini sudah lunas bulan {{ form.selectedMonths.join(', ') }}!
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </section>
-
-            </template>
-            <!-- ========================================================================= -->
-
-            <!-- Section: Payment Details -->
-            <section class="bg-surface-container-lowest rounded-2xl p-md shadow-sm border border-surface-variant/50 flex flex-col gap-md lg:grid lg:grid-cols-2 lg:gap-md lg:items-start">
-              <div class="flex flex-col gap-xs">
-                <label class="font-label-md text-label-md text-on-surface" for="tanggal">Tanggal Bayar</label>
-                <div class="relative">
-                  <input
-                    v-model="form.tanggal"
-                    required
-                    type="date"
-                    class="w-full h-12 rounded-xl border-outline-variant text-on-surface bg-surface-bright focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/20 pl-4 pr-4 font-body-md text-body-md transition-all block"
-                    id="tanggal"
-                  >
-                </div>
-              </div>
-              
-              <div class="flex flex-col gap-xs">
-                <label class="font-label-md text-label-md text-on-surface" for="nominal">Nominal Per Bulan</label>
-                <div class="relative">
-                  <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                    <span class="text-on-surface-variant font-body-md text-body-md">Rp</span>
-                  </div>
-                  <input v-model="form.nominal" required list="nominal-options" class="w-full h-12 rounded-xl border-outline-variant text-on-surface bg-surface-bright focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/20 pl-12 pr-4 font-body-md text-body-md transition-all block" id="nominal" type="number" step="1000">
-                  <datalist id="nominal-options">
-                    <option value="30000"></option>
-                    <option value="40000"></option>
-                    <option value="50000"></option>
-                  </datalist>
-                </div>
-              </div>
-            </section>
-
-            <!-- Section: Summary -->
-            <section class="bg-surface-container-lowest rounded-2xl p-md shadow-sm border-l-4 border-primary flex flex-col gap-sm">
-              <h3 class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Ringkasan Transaksi</h3>
-              
-              <div class="bg-primary/10 rounded-xl p-3 flex gap-3 mb-2" v-if="inputMode === 'massal'">
-                <span class="material-symbols-outlined text-primary shrink-0 mt-0.5">info</span>
-                <p class="font-body-sm text-on-surface">
-                  Akan mencatat pembayaran untuk <strong class="text-primary">{{ form.siswa_ids.length }} siswa</strong> 
-                  (bulan <strong class="text-primary">{{ form.selectedMonths.join(', ') }}</strong>) = 
-                  <strong class="text-primary">{{ totalTransaksi }} transaksi</strong>, 
-                  total <strong class="text-primary">Rp {{ formatRupiah(totalBayar) }}</strong>
-                </p>
-              </div>
-
-              <div class="bg-primary/10 rounded-xl p-3 flex gap-3 mb-2" v-else-if="inputMode === 'satuan' && form.selectedMonths.length > 0">
-                <span class="material-symbols-outlined text-primary shrink-0 mt-0.5">info</span>
-                <p class="font-body-sm text-on-surface">
-                  Akan mencatat pembayaran untuk <strong class="text-primary">1 siswa</strong> 
-                  (bulan <strong class="text-primary">{{ form.selectedMonths.join(', ') }}</strong>) = 
-                  <strong class="text-primary">{{ totalTransaksi }} transaksi</strong>, 
-                  total <strong class="text-primary">Rp {{ formatRupiah(totalBayar) }}</strong>
-                </p>
-              </div>
-
-              <div class="flex justify-between items-center py-2 border-b border-surface-container-highest">
-                <span class="font-body-md text-body-md text-on-surface">Total Transaksi</span>
-                <span class="font-headline-md text-headline-md text-primary">{{ totalTransaksi }}</span>
-              </div>
-              <div class="flex justify-between items-center py-2">
-                <span class="font-body-md text-body-md text-on-surface">Total Bayar</span>
-                <span class="font-headline-md text-headline-md text-primary">Rp {{ formatRupiah(totalBayar) }}</span>
-              </div>
-            </section>
-          </form>
+        <div class="space-y-3 text-sm">
+          <div class="flex justify-between">
+            <span class="text-[#78716C]">Mode Input</span>
+            <span class="font-semibold text-[#1C1917] capitalize">{{ inputMode }}</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-[#78716C]">Bulan Dipilih</span>
+            <span class="font-semibold text-[#1C1917] tabular-nums">{{ form.selectedMonths.length }} bulan</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-[#78716C]">Jumlah Item Transaksi</span>
+            <span class="font-mono font-semibold text-[#1C1917] tabular-nums">{{ totalTransaksi }}</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-[#78716C]">Nominal / Bulan</span>
+            <span class="font-mono font-semibold text-[#1C1917] tabular-nums">Rp {{ formatRupiah(form.nominal) }}</span>
+          </div>
         </div>
 
-        <!-- RIGHT COLUMN: Sticky Action & Quick Info -->
-        <aside class="hidden lg:block lg:sticky lg:top-20 lg:self-start space-y-4">
-          <!-- Save Button Card -->
-          <div class="bg-surface-container-lowest rounded-2xl p-md shadow-sm border border-surface-variant/50">
-            <button 
-              @click="saveTransaction"
-              :disabled="isSubmitDisabled"
-              :class="[
-                'w-full h-[56px] text-white font-label-md text-label-md rounded-xl transition-transform shadow-md flex items-center justify-center gap-2',
-                (isSubmitDisabled) ? 'bg-secondary opacity-80 cursor-not-allowed' : 'bg-primary-container active:scale-95'
-              ]"
-            >
-              <span v-if="!isSubmitting && !isSuccess" class="material-symbols-outlined fill">save</span>
-              <span v-if="isSubmitting" class="material-symbols-outlined animate-spin">sync</span>
-              <span v-if="isSuccess" class="material-symbols-outlined fill">check_circle</span>
-              {{ isSuccess ? 'Tersimpan' : (isSubmitting ? 'Menyimpan...' : 'Simpan Transaksi') }}
-            </button>
-            
-            <div v-if="isSubmitDisabled" class="mt-3 text-xs text-on-surface-variant text-center space-y-1">
-              <template v-if="form.selectedMonths.length === 0">⚠ Pilih minimal 1 bulan</template>
-              <template v-else-if="inputMode === 'satuan' && !form.siswa_id">⚠ Pilih siswa terlebih dahulu</template>
-              <template v-else-if="inputMode === 'massal' && form.siswa_ids.length === 0">⚠ Pilih minimal 1 siswa</template>
-              <template v-else-if="!form.kelas_id">⚠ Pilih kelas terlebih dahulu</template>
-              <template v-else-if="!form.tanggal">⚠ Isi tanggal bayar</template>
-            </div>
-          </div>
+        <div class="pt-4 border-t border-black/[0.06] flex justify-between items-center">
+          <span class="text-sm font-bold text-[#1C1917]">Total Penerimaan</span>
+          <span class="text-xl font-extrabold font-mono tabular-nums text-[#A8551E]">Rp {{ formatRupiah(totalBayar) }}</span>
+        </div>
 
-          <!-- Quick Stats Card -->
-          <div class="bg-surface-container-lowest rounded-2xl p-md shadow-sm border border-surface-variant/50">
-            <h3 class="font-label-md text-label-md text-on-surface-variant uppercase tracking-wider mb-3">Ringkasan Cepat</h3>
-            <div class="space-y-2 text-sm">
-              <div class="flex justify-between">
-                <span class="text-on-surface-variant">Mode</span>
-                <span class="font-medium text-primary capitalize">{{ inputMode }}</span>
-              </div>
-              <div class="flex justify-between">
-                <span class="text-on-surface-variant">Bulan dipilih</span>
-                <span class="font-medium">{{ form.selectedMonths.length }}</span>
-              </div>
-              <div class="flex justify-between" v-if="inputMode === 'massal'">
-                <span class="text-on-surface-variant">Siswa dipilih</span>
-                <span class="font-medium">{{ form.siswa_ids.length }}</span>
-              </div>
-              <div class="flex justify-between" v-else>
-                <span class="text-on-surface-variant">Siswa</span>
-                <span class="font-medium">{{ form.siswa_id ? 'Dipilih' : 'Belum dipilih' }}</span>
-              </div>
-              <div class="flex justify-between pt-2 border-t border-outline-variant/30">
-                <span class="text-on-surface-variant font-medium">Total</span>
-                <span class="font-headline-sm text-primary">Rp {{ formatRupiah(totalBayar) }}</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- Shortcut Tips -->
-          <div class="bg-surface-container-lowest rounded-2xl p-md shadow-sm border border-surface-variant/50">
-            <h3 class="font-label-md text-label-md text-on-surface-variant uppercase tracking-wider mb-3 flex items-center gap-2">
-              <span class="material-symbols-outlined text-secondary">lightbulb</span>
-              Tips
-            </h3>
-            <ul class="space-y-2 text-sm text-on-surface-variant">
-              <li class="flex items-start gap-2"><span class="material-symbols-outlined text-secondary text-[16px] shrink-0 mt-0.5">check</span> Gunakan <strong>Input Massal</strong> untuk banyak siswa sekaligus</li>
-              <li class="flex items-start gap-2"><span class="material-symbols-outlined text-secondary text-[16px] shrink-0 mt-0.5">check</span> Pilih bulan dulu, baru pilih kelas & siswa</li>
-              <li class="flex items-start gap-2"><span class="material-symbols-outlined text-secondary text-[16px] shrink-0 mt-0.5">check</span> Cari nama siswa di kolom pencarian (massal)</li>
-              <li class="flex items-start gap-2"><span class="material-symbols-outlined text-secondary text-[16px] shrink-0 mt-0.5">check</span> WA terkirim otomatis ke wali setelah simpan</li>
-            </ul>
-          </div>
-        </aside>
-        
-      </div>
-
-      <!-- Mobile Sticky Footer (hidden on lg+) -->
-      <div class="lg:hidden fixed bottom-0 left-0 w-full bg-surface-container-lowest p-container-margin shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
-        <button 
+        <button
+          type="button"
           @click="saveTransaction"
           :disabled="isSubmitDisabled"
-          :class="[
-            'w-full h-[56px] text-white font-label-md text-label-md rounded-xl transition-transform shadow-md flex items-center justify-center gap-2',
-            (isSubmitDisabled) ? 'bg-secondary opacity-80 cursor-not-allowed' : 'bg-primary-container active:scale-95'
-          ]"
+          class="ui-btn-primary ui-btn-icon-l w-full"
         >
-          <span v-if="!isSubmitting && !isSuccess" class="material-symbols-outlined fill">save</span>
-          <span v-if="isSubmitting" class="material-symbols-outlined animate-spin">sync</span>
-          <span v-if="isSuccess" class="material-symbols-outlined fill">check_circle</span>
-          {{ isSuccess ? 'Tersimpan' : (isSubmitting ? 'Menyimpan...' : 'Simpan Transaksi') }}
+          <UiIcon v-if="isSubmitting" name="progress_activity" :size="17" :weight="600" class="animate-spin" />
+          <UiIcon v-else name="save" :size="17" :weight="600" />
+          <span>{{ isSubmitting ? 'Menyimpan...' : 'Simpan Penerimaan Infak' }}</span>
         </button>
-      </div>
 
-    </main>
+        <div class="pt-3 border-t border-black/[0.06] text-xs text-[#78716C] space-y-1.5">
+          <p class="font-semibold text-[#44403C] inline-flex items-center gap-1.5">
+            <UiIcon name="lightbulb" :size="14" :weight="600" class="text-[#A8551E]" />
+            Tips Cepat
+          </p>
+          <p>Gunakan <strong>Mode Massal</strong> untuk mencatat beberapa siswa sekaligus. Konfirmasi WhatsApp akan berjalan bertahap di latar belakang.</p>
+        </div>
+      </aside>
+    </div>
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, computed, onMounted, watch } from 'vue';
-import { useRouter } from 'vue-router';
 import axios from 'axios';
 import { drainOutbox } from '../../utils/waOutbox';
-
-const router = useRouter();
+import { notify } from '@/utils/toast';
 
 const monthsList = ['Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des', 'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun'];
 
 const isSubmitting = ref(false);
 const isSuccess = ref(false);
-const inputMode = ref('satuan'); // 'satuan' atau 'massal'
+const inputMode = ref('satuan');
 
 const form = reactive({
   kelas_id: '',
   siswa_id: '',
   siswa_ids: [],
-  tanggal: '',
+  tanggal: new Date().toISOString().split('T')[0],
   nominal: 30000,
   selectedMonths: []
 });
@@ -366,16 +242,12 @@ const kelasi = ref([]);
 const students = ref([]);
 const searchQuery = ref('');
 const isFetchingStudents = ref(false);
-const paidMonths = ref([]); // for satuan
+const paidMonths = ref([]);
 
 const filteredStudents = computed(() => {
   if (!searchQuery.value) return students.value;
   const q = searchQuery.value.toLowerCase();
-  return students.value.filter(s => s.fullName.toLowerCase().includes(q));
-});
-
-const unpaidMonthsForSatuan = computed(() => {
-  return monthsList.filter(m => !paidMonths.value.includes(m));
+  return students.value.filter(s => String(s.fullName).toLowerCase().includes(q));
 });
 
 const isSubmitDisabled = computed(() => {
@@ -383,14 +255,12 @@ const isSubmitDisabled = computed(() => {
   if (form.selectedMonths.length === 0) return true;
   if (inputMode.value === 'satuan' && !form.siswa_id) return true;
   if (inputMode.value === 'massal' && form.siswa_ids.length === 0) return true;
-  if (!form.kelas_id) return true;
-  if (!form.tanggal) return true;
+  if (!form.kelas_id || !form.tanggal) return true;
   return false;
 });
 
 const setInputMode = (mode) => {
   inputMode.value = mode;
-  // reset form when mode changes
   form.kelas_id = '';
   form.siswa_id = '';
   form.siswa_ids = [];
@@ -408,44 +278,35 @@ const deselectAllSiswa = () => {
 };
 
 const getInitials = (name) => {
-  if (!name) return '';
-  const parts = name.split(' ');
-  if (parts.length >= 2) {
-    return parts[0][0] + parts[1][0];
-  }
-  return name.substring(0, 2);
+  if (!name) return 'S';
+  const parts = String(name).trim().split(/\s+/);
+  return parts.length >= 2 ? (parts[0][0] + parts[1][0]).toUpperCase() : String(name).substring(0, 2).toUpperCase();
 };
 
 onMounted(async () => {
-  // Set default date to today
-  const today = new Date();
-  form.tanggal = today.toISOString().split('T')[0];
-
   try {
     const res = await axios.get('/kelas');
-    kelasi.value = res.data;
+    kelasi.value = res.data || [];
   } catch (e) {
-    console.error("Gagal mengambil kelas", e);
+    console.error('Gagal mengambil kelas', e);
   }
 });
 
-// -------------- WATCHERS FOR SATUAN --------------
 watch(() => form.kelas_id, async (newKelasId) => {
   if (inputMode.value !== 'satuan') return;
-  
   form.siswa_id = '';
   form.selectedMonths = [];
   paidMonths.value = [];
   students.value = [];
-  
+
   if (newKelasId) {
     isFetchingStudents.value = true;
     try {
       const res = await axios.get('/siswa');
-      students.value = res.data.filter(s => {
-        const cls = kelasi.value.find(k => k.id === newKelasId);
-        return s.kelas === cls.nama_kelas;
-      }).sort((a, b) => String(a.fullName).localeCompare(String(b.fullName), 'id'));
+      const cls = kelasi.value.find(k => k.id === newKelasId);
+      students.value = (res.data || [])
+        .filter(s => cls && s.kelas === cls.nama_kelas)
+        .sort((a, b) => String(a.fullName).localeCompare(String(b.fullName), 'id'));
     } catch (e) {
       console.error(e);
     } finally {
@@ -458,39 +319,35 @@ watch(() => form.siswa_id, async (newSiswaId) => {
   if (inputMode.value !== 'satuan') return;
   form.selectedMonths = [];
   paidMonths.value = [];
-  
+
   if (newSiswaId) {
     try {
       const currentYear = new Date().getFullYear();
       const res = await axios.get(`/siswa/${newSiswaId}/infak?tahun=${currentYear}`);
-      
       const engToIdMap = {
-        'January': 'Jan', 'February': 'Feb', 'March': 'Mar', 'April': 'Apr',
-        'May': 'Mei', 'June': 'Jun', 'July': 'Jul', 'August': 'Agu',
-        'September': 'Sep', 'October': 'Okt', 'November': 'Nov', 'December': 'Des'
+        January: 'Jan', February: 'Feb', March: 'Mar', April: 'Apr',
+        May: 'Mei', June: 'Jun', July: 'Jul', August: 'Agu',
+        September: 'Sep', October: 'Okt', November: 'Nov', December: 'Des'
       };
-      
-      paidMonths.value = res.data.map(i => engToIdMap[i.bulan] || i.bulan);
+      paidMonths.value = (res.data || []).map(i => engToIdMap[i.bulan] || i.bulan);
     } catch (error) {
       console.error(error);
     }
   }
 });
 
-// -------------- WATCHERS FOR MASSAL --------------
 watch([() => form.kelas_id, () => form.selectedMonths], async ([newKelasId, newSelectedMonths]) => {
   if (inputMode.value !== 'massal') return;
-  
   form.siswa_ids = [];
   students.value = [];
-  
+
   if (newKelasId && newSelectedMonths.length > 0) {
     const selectedMonth = newSelectedMonths[0];
     isFetchingStudents.value = true;
     try {
       const currentYear = new Date().getFullYear();
       const res = await axios.get(`/kelas/${newKelasId}/unpaid-students?bulan=${selectedMonth}&tahun=${currentYear}`);
-      students.value = [...res.data].sort((a, b) => String(a.fullName).localeCompare(String(b.fullName), 'id'));
+      students.value = [...(res.data || [])].sort((a, b) => String(a.fullName).localeCompare(String(b.fullName), 'id'));
     } catch (e) {
       console.error(e);
     } finally {
@@ -499,96 +356,50 @@ watch([() => form.kelas_id, () => form.selectedMonths], async ([newKelasId, newS
   }
 }, { deep: true });
 
-// -------------- METHODS --------------
 const toggleMonth = (month) => {
-  // Only for satuan mode (allows multiple)
   const index = form.selectedMonths.indexOf(month);
-  if (index === -1) {
-    form.selectedMonths.push(month);
-  } else {
-    form.selectedMonths.splice(index, 1);
-  }
+  if (index === -1) form.selectedMonths.push(month);
+  else form.selectedMonths.splice(index, 1);
 };
 
 const toggleMonthMassal = (month) => {
-  // For massal mode - allows multiple months now
   const index = form.selectedMonths.indexOf(month);
-  if (index === -1) {
-    form.selectedMonths.push(month);
-  } else {
-    form.selectedMonths.splice(index, 1);
-  }
-  // Reset students when months change
+  if (index === -1) form.selectedMonths.push(month);
+  else form.selectedMonths.splice(index, 1);
   form.siswa_ids = [];
   students.value = [];
 };
 
 const totalTransaksi = computed(() => {
-  if (inputMode.value === 'massal') {
-    return form.siswa_ids.length * form.selectedMonths.length;
-  }
+  if (inputMode.value === 'massal') return form.siswa_ids.length * form.selectedMonths.length;
   return form.selectedMonths.length;
 });
 
-const totalBayar = computed(() => {
-  return totalTransaksi.value * form.nominal;
-});
+const totalBayar = computed(() => totalTransaksi.value * Number(form.nominal || 0));
 
-const formatRupiah = (angka) => {
-  return angka.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
-};
+const formatRupiah = (angka) => Number(angka || 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 
 const saveTransaction = async () => {
-  if(form.selectedMonths.length === 0) {
-    alert("Pilih minimal satu bulan!");
-    return;
-  }
-
-  const isoTanggal = form.tanggal;
-  if (!isoTanggal) {
-    alert("Tanggal bayar belum diisi.");
-    return;
-  }
-
-  if(!form.kelas_id) {
-    alert("Lengkapi semua field yang diperlukan!");
-    return;
-  }
-  
-    if (inputMode.value === 'satuan' && !form.siswa_id) {
-      alert("Silakan pilih siswa!");
-      return;
-    }
-    if (inputMode.value === 'massal' && form.siswa_ids.length === 0) {
-      alert("Silakan pilih minimal satu siswa untuk input massal!");
-      return;
-    }
-
+  if (isSubmitDisabled.value) return;
   isSubmitting.value = true;
-  
+
   try {
-    let payload = {
+    const payload = {
       kelas_id: form.kelas_id,
       tanggal_bayar: form.tanggal,
       nominal: form.nominal,
       months: form.selectedMonths
     };
-
-    if (inputMode.value === 'massal') {
-      payload.siswa_ids = form.siswa_ids;
-    } else {
-      payload.siswa_id = form.siswa_id;
-    }
+    if (inputMode.value === 'massal') payload.siswa_ids = form.siswa_ids;
+    else payload.siswa_id = form.siswa_id;
 
     await axios.post('/infak', payload);
-
-    // Kirim konfirmasi WA ke wali secara bertahap (dengan delay) di background
     drainOutbox().catch(() => {});
 
     isSuccess.value = true;
+    notify('Penerimaan infak berhasil dicatat.', 'success');
     setTimeout(() => {
       isSuccess.value = false;
-      // Reset form
       form.kelas_id = '';
       form.siswa_id = '';
       form.siswa_ids = [];
@@ -598,7 +409,7 @@ const saveTransaction = async () => {
     }, 1500);
   } catch (error) {
     console.error(error);
-    alert("Gagal menyimpan infak");
+    notify(error.response?.data?.message || 'Gagal menyimpan penerimaan infak.', 'error');
   } finally {
     isSubmitting.value = false;
   }

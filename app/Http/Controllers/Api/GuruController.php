@@ -29,7 +29,7 @@ class GuruController extends Controller
                 'password' => 'Terkunci', // Usually shouldn't send raw password back, but per the UI design they want to view it. But passwords are hashed. We might need a separate way or just say 'Terkunci'. 
                 // However the prompt UI shows the password, in a real app we'd reset it or not show it. I will leave it empty.
                 'kelas' => $kelas,
-                'colorClass' => 'bg-primary-container text-on-primary-container'
+                'colorClass' => 'bg-[#F9EFE7] text-[#A8551E]'
             ];
         });
 
