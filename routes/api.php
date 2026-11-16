@@ -49,6 +49,7 @@ Route::middleware('auth:sanctum')->group(function () {
     
     Route::get('/guru', [GuruController::class, 'index']);
     Route::post('/guru', [GuruController::class, 'store']);
+    Route::put('/guru/{id}/kelas', [GuruController::class, 'updateKelas']);
     Route::put('/guru/{id}/reset-password', [GuruController::class, 'resetPassword']);
     Route::delete('/guru/{id}', [GuruController::class, 'destroy']);
 

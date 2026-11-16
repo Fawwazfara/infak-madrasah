@@ -116,6 +116,12 @@
                     class="w-4 h-4 rounded border-[#D6D0C4] text-[#A8551E] focus:ring-[#A8551E]"
                   />
                   <span class="text-sm font-semibold truncate">{{ k.nama_kelas }}</span>
+                  <span
+                    v-if="classOwnerName(k.id)"
+                    class="text-[10px] font-medium px-1.5 py-0.5 rounded bg-[#ECE8DF] text-[#57534E] shrink-0"
+                  >
+                    {{ classOwnerName(k.id) }}
+                  </span>
                 </div>
                 <UiIcon
                   v-if="form.kelas_ids.includes(k.id)"
@@ -222,6 +228,14 @@
             <div class="flex items-center gap-2 pt-1">
               <button
                 type="button"
+                @click="openKelasModal(teacher)"
+                class="flex-1 ui-btn-primary !min-h-[38px] !py-1.5 !px-3 text-xs"
+              >
+                <UiIcon name="class" :size="14" />
+                <span>Atur Kelas</span>
+              </button>
+              <button
+                type="button"
                 @click="openResetModal(teacher)"
                 class="flex-1 ui-btn-secondary !min-h-[38px] !py-1.5 !px-3 text-xs"
               >
@@ -241,6 +255,90 @@
           </article>
         </div>
       </section>
+    </div>
+
+    <!-- Modal Atur Kelas Guru -->
+    <div
+      v-if="showKelasModal"
+      class="fixed inset-0 z-50 bg-[#1C1917]/50 backdrop-blur-[2px] flex items-center justify-center p-4"
+      @click.self="showKelasModal = false"
+    >
+      <div class="ui-panel-elevated w-full max-w-md p-6">
+        <div class="flex items-start justify-between gap-3 mb-4">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-[#F9EFE7] text-[#A8551E] flex items-center justify-center shrink-0">
+              <UiIcon name="class" :size="20" />
+            </div>
+            <div>
+              <h3 class="text-lg font-bold text-[#1C1917]">Atur Kelas Diampu</h3>
+              <p class="text-xs text-[#78716C] mt-0.5">
+                Wali Kelas: <span class="font-semibold text-[#1C1917]">{{ selectedTeacher?.name }}</span>
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            @click="showKelasModal = false"
+            class="w-9 h-9 rounded-lg flex items-center justify-center text-[#78716C] hover:text-[#1C1917] hover:bg-[#ECE8DF]"
+            aria-label="Tutup modal"
+          >
+            <UiIcon name="close" :size="18" />
+          </button>
+        </div>
+
+        <form @submit.prevent="submitUpdateKelas" class="space-y-4">
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs font-semibold text-[#57534E] uppercase tracking-wider">Pilih Kelas</span>
+              <span class="text-[11px] font-semibold text-[#A8551E] tabular-nums">{{ editKelasIds.length }} dipilih</span>
+            </div>
+            <div class="p-3 rounded-xl bg-[#F7F4ED] border border-[#E7E2D8] max-h-64 overflow-y-auto space-y-1.5">
+              <label
+                v-for="k in kelasList"
+                :key="k.id"
+                class="flex items-center justify-between gap-3 px-3 py-2 rounded-lg cursor-pointer transition-colors"
+                :class="editKelasIds.includes(k.id) ? 'bg-[#FDFCF9] text-[#1C1917]' : 'hover:bg-[#FDFCF9]/70 text-[#57534E]'"
+                :style="editKelasIds.includes(k.id) ? 'box-shadow: var(--shadow-border)' : ''"
+              >
+                <div class="flex items-center gap-2.5 min-w-0">
+                  <input
+                    type="checkbox"
+                    :value="k.id"
+                    v-model="editKelasIds"
+                    class="w-4 h-4 rounded border-[#D6D0C4] text-[#A8551E] focus:ring-[#A8551E]"
+                  />
+                  <span class="text-sm font-semibold truncate">{{ k.nama_kelas }}</span>
+                  <span
+                    v-if="classOwnerName(k.id, selectedTeacher?.id)"
+                    class="text-[10px] font-medium px-1.5 py-0.5 rounded bg-[#ECE8DF] text-[#57534E] shrink-0"
+                  >
+                    {{ classOwnerName(k.id, selectedTeacher?.id) }}
+                  </span>
+                </div>
+                <UiIcon
+                  v-if="editKelasIds.includes(k.id)"
+                  name="done"
+                  :size="15"
+                  class="text-[#A8551E]"
+                />
+              </label>
+            </div>
+            <p class="text-[11px] text-[#78716C] mt-2">
+              Catatan: satu kelas hanya memiliki satu wali kelas. Memilih kelas yang sudah diampu guru lain akan memindahkannya ke guru ini.
+            </p>
+          </div>
+
+          <div class="flex justify-end gap-2.5 pt-2">
+            <button type="button" @click="showKelasModal = false" class="ui-btn-secondary">
+              Batal
+            </button>
+            <button type="submit" :disabled="isUpdatingKelas" class="ui-btn-primary">
+              <UiIcon v-if="isUpdatingKelas" name="progress_activity" :size="16" class="animate-spin" />
+              <span>{{ isUpdatingKelas ? 'Menyimpan...' : 'Simpan Penugasan' }}</span>
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
 
     <!-- Modal Reset Password -->
@@ -368,6 +466,10 @@ const form = reactive({
   kelas_ids: [],
 });
 
+const showKelasModal = ref(false);
+const editKelasIds = ref([]);
+const isUpdatingKelas = ref(false);
+
 const showResetModal = ref(false);
 const selectedTeacher = ref(null);
 const newPassword = ref('');
@@ -376,6 +478,13 @@ const isResetting = ref(false);
 
 const teacherToDelete = ref(null);
 const isDeleting = ref(false);
+
+const classOwnerName = (kelasId, excludeTeacherId = null) => {
+  const owner = teachers.value.find(
+    (t) => t.id !== excludeTeacherId && Array.isArray(t.kelas_ids) && t.kelas_ids.includes(kelasId)
+  );
+  return owner ? owner.name : '';
+};
 
 const filteredTeachers = computed(() => {
   const q = searchQuery.value.trim().toLowerCase();
@@ -435,6 +544,30 @@ const createTeacher = async () => {
     notify(msg, 'error');
   } finally {
     isSubmitting.value = false;
+  }
+};
+
+const openKelasModal = (teacher) => {
+  selectedTeacher.value = teacher;
+  editKelasIds.value = Array.isArray(teacher.kelas_ids) ? [...teacher.kelas_ids] : [];
+  showKelasModal.value = true;
+};
+
+const submitUpdateKelas = async () => {
+  if (!selectedTeacher.value) return;
+  isUpdatingKelas.value = true;
+  try {
+    await axios.put(`/guru/${selectedTeacher.value.id}/kelas`, {
+      kelas_ids: editKelasIds.value,
+    });
+    notify(`Penugasan kelas untuk ${selectedTeacher.value.name} berhasil disimpan.`, 'success');
+    showKelasModal.value = false;
+    await fetchData();
+  } catch (err) {
+    const msg = err.response?.data?.message || 'Gagal memperbarui penugasan kelas.';
+    notify(msg, 'error');
+  } finally {
+    isUpdatingKelas.value = false;
   }
 };
 
